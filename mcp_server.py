@@ -17,6 +17,7 @@ Run: uv run mcp_server.py              # stdio (Claude Code / ACP)
 
 import argparse
 import json
+import os
 import re
 import sqlite3
 from datetime import date, datetime
@@ -666,6 +667,11 @@ ALLOWED_HTTP_HOSTS = [
     "[::1]:*",
     "host.docker.internal:*",
 ]
+
+# Extra hosts from env (comma-separated), e.g. OpenShift route hostnames
+_extra = os.environ.get("ALLOWED_HTTP_HOSTS", "")
+if _extra:
+    ALLOWED_HTTP_HOSTS.extend(h.strip() for h in _extra.split(",") if h.strip())
 
 
 def _configure_http(port: int = 8000) -> None:

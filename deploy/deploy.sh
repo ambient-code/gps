@@ -118,6 +118,16 @@ cmd_apply() {
     if [[ -n "$EFFECTIVE_IMAGE" ]]; then
         mv "$KUSTOMIZE_DIR/kustomization.yaml.bak" "$KUSTOMIZE_DIR/kustomization.yaml"
     fi
+
+    # Inject route hostname into ALLOWED_HTTP_HOSTS for DNS rebinding protection
+    if [[ "$OVERLAY" == "openshift" ]]; then
+        local ROUTE_HOST
+        ROUTE_HOST=$($KUBECTL -n "$NAMESPACE" get route gps-mcp-server -o jsonpath='{.spec.host}' 2>/dev/null || true)
+        if [[ -n "$ROUTE_HOST" ]]; then
+            echo "=== Setting ALLOWED_HTTP_HOSTS=$ROUTE_HOST ==="
+            $KUBECTL -n "$NAMESPACE" set env deployment/gps-mcp-server "ALLOWED_HTTP_HOSTS=$ROUTE_HOST"
+        fi
+    fi
     echo ""
     echo "=== Waiting for rollout ==="
     $KUBECTL -n "$NAMESPACE" rollout status deployment/gps-mcp-server --timeout=120s
