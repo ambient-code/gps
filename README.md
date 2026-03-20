@@ -1,4 +1,4 @@
-# GPS - Global Positioning System
+# GPS - Global Positioning System MCP Server
 
 A read-only caching tier that gives agents and humans sub-millisecond access to org and engineering data. GPS materializes people, teams, issues, features, release schedules, component mappings, and governance documents into a SQLite database and serves them over [MCP](https://modelcontextprotocol.io) — optimized for high-frequency agent queries with zero upstream latency.
 

@@ -3,3 +3,8 @@ kind: Kustomization
 resources:
   - ../../base
   - route.yaml
+patches:
+  - target:
+      kind: Deployment
+      name: gps-mcp-server
+    path: remove-pull-secret.yaml
