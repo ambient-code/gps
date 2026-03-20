@@ -25,13 +25,18 @@ echo ""
 # 1. Config validation
 echo "--- Config ---"
 ENV_FILE="$REPO_ROOT/.env"
-run ".env exists" test -f "$ENV_FILE"
+if [ -f "$ENV_FILE" ]; then
+    printf "%-40s%s\n" ".env exists" "PASS"
+    PASS=$((PASS + 1))
+else
+    printf "%-40s%s\n" ".env exists" "SKIP (optional)"
+fi
 
 # 2. Lint
 echo ""
 echo "--- Lint ---"
-run "ruff check" uv run ruff check "$REPO_ROOT"
-run "ruff format --check" uv run ruff format --check "$REPO_ROOT"
+run "ruff check" uv run --extra dev ruff check "$REPO_ROOT"
+run "ruff format --check" uv run --extra dev ruff format --check "$REPO_ROOT"
 
 # 3. Build DB
 echo ""
