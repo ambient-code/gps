@@ -41,10 +41,10 @@ mcp = FastMCP(
     instructions=(
         "GPS is a read-only caching tier for org and engineering data. "
         "Query people, teams, issues, features, release schedules, "
-        "component mappings, and governance documents with sub-ms latency. "
-        "Read gps://schema first to understand available tables. "
+        "component mappings, scrum team boards, and governance documents with sub-ms latency. "
+        "Use list_scrum_team_boards for scrum team staffing data (FTE counts by role). "
         "Use list_documents/get_document/get_document_section for governance docs. "
-        "No auth required — all data is read-only."
+        "All data is read-only."
     ),
 )
 
@@ -304,6 +304,48 @@ def list_team_members(team_name: str) -> str:
         )
 
     return json.dumps({"teams": results}, default=str)
+
+
+@mcp.tool(
+    annotations={"readOnlyHint": True, "openWorldHint": False},
+)
+def list_scrum_team_boards(organization: str | None = None) -> str:
+    """List scrum team boards with staffing breakdown by role.
+
+    Optionally filter by organization (fuzzy match). Returns team name,
+    Jira board URL, PM, and non-zero FTE counts per role.
+    """
+    conn = _get_conn()
+    query = (
+        "SELECT organization, scrum_team_name, jira_board_url, pm, "
+        "agilist, architects, bff, backend_engineer, devops, manager, "
+        "operations_manager, qe, staff_engineers, ui, total_staff "
+        "FROM scrum_team_board"
+    )
+    if organization:
+        query += " WHERE organization LIKE ?"
+        rows = conn.execute(query + " ORDER BY total_staff DESC", (f"%{organization}%",)).fetchall()
+    else:
+        rows = conn.execute(query + " ORDER BY total_staff DESC").fetchall()
+    role_cols = [
+        "agilist",
+        "architects",
+        "bff",
+        "backend_engineer",
+        "devops",
+        "manager",
+        "operations_manager",
+        "qe",
+        "staff_engineers",
+        "ui",
+    ]
+    teams = []
+    for row in rows:
+        d = dict(row)
+        roles = {k: d.pop(k) for k in role_cols if d.get(k)}
+        d["roles"] = roles
+        teams.append(d)
+    return json.dumps({"teams": teams, "count": len(teams)}, default=str)
 
 
 @mcp.tool(
@@ -687,6 +729,40 @@ def _configure_http(port: int = 8000) -> None:
     )
 
 
+def _wrap_basic_auth(app):
+    """Wrap a Starlette app with basic auth if GPS_AUTH_USER/GPS_AUTH_PASS are set."""
+    import base64
+    import secrets
+
+    from starlette.middleware.base import BaseHTTPMiddleware
+    from starlette.responses import Response
+
+    auth_user = os.environ.get("GPS_AUTH_USER", "")
+    auth_pass = os.environ.get("GPS_AUTH_PASS", "")
+    if not (auth_user and auth_pass):
+        return app
+
+    expected = base64.b64encode(f"{auth_user}:{auth_pass}".encode()).decode()
+
+    class BasicAuthMiddleware(BaseHTTPMiddleware):
+        async def dispatch(self, request, call_next):
+            if request.url.path != "/mcp":
+                return await call_next(request)
+            # Check Authorization header
+            auth_header = request.headers.get("Authorization", "")
+            if auth_header.startswith("Basic "):
+                if secrets.compare_digest(auth_header[6:], expected):
+                    return await call_next(request)
+            # Check query param fallback (for clients that don't support headers)
+            token = request.query_params.get("token", "")
+            if token and secrets.compare_digest(token, expected):
+                return await call_next(request)
+            return Response("Unauthorized", status_code=401, headers={"WWW-Authenticate": "Basic"})
+
+    app.add_middleware(BasicAuthMiddleware)
+    return app
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="GPS MCP Server")
     parser.add_argument("--http", action="store_true", help="Use HTTP transport (default: stdio)")
@@ -695,6 +771,10 @@ if __name__ == "__main__":
 
     if args.http:
         _configure_http(args.port)
-        mcp.run(transport="streamable-http")
+        app = mcp.streamable_http_app()
+        app = _wrap_basic_auth(app)
+        import uvicorn
+
+        uvicorn.run(app, host="0.0.0.0", port=args.port)
     else:
         mcp.run(transport="stdio")
