@@ -103,7 +103,7 @@ metadata:
   name: gps-mcp
 spec:
   selector:
-    app: mcp-server
+    app: gps-mcp-server
   ports:
     - port: 8000
       targetPort: 8000
