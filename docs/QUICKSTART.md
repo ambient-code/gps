@@ -5,8 +5,10 @@ GPS gives Claude Code instant access to org and engineering data (scrum teams, s
 ## Setup
 
 ```bash
-claude mcp add gps-remote "https://gps-mcp-server-gps-mcp-server.apps.rosa.vteam-stage.7fpc.p3.openshiftapps.com/mcp?token=cmVkaGF0OnJlZGhhdCEhMTIz" -s user -t http
+claude mcp add gps-remote "<MCP_URL_WITH_TOKEN>" -s user -t http
 ```
+
+Get the URL from your team lead — it includes an auth token.
 
 Then restart Claude Code.
 
