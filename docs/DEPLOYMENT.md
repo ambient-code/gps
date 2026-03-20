@@ -197,6 +197,7 @@ deploy/deploy.sh apply --overlay openshift
 | `NAMESPACE` | Deploy to a specific namespace |
 | `IMAGE_REGISTRY` | Override container registry host (e.g., OpenShift internal registry route) |
 | `IMAGE` | Override full image reference for apply |
+| `ALLOWED_HTTP_HOSTS` | Comma-separated hostnames allowed through DNS rebinding protection (auto-set by `deploy.sh` for OpenShift routes) |
 
 ```bash
 NAMESPACE=my-gps deploy/deploy.sh apply
@@ -258,5 +259,5 @@ The workflow automatically creates a `quay-pull-secret` in the `gps-mcp-server` 
 - The database is opened read-only (`?mode=ro`, `PRAGMA query_only = ON`)
 - No authentication required — GPS serves organizational data, not secrets
 - HTTP mode includes DNS rebinding protection (localhost, Docker internal only by default)
+- Set `ALLOWED_HTTP_HOSTS` env var (comma-separated) to allow additional hostnames (e.g., OpenShift routes, reverse proxy hosts). `deploy.sh` auto-injects the route hostname for OpenShift overlays.
 - No TLS — use a reverse proxy or Route for TLS termination
-- Add service hostnames to `ALLOWED_HTTP_HOSTS` in `mcp_server.py` if deploying behind a proxy
