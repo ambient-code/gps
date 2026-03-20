@@ -130,6 +130,24 @@ CREATE TABLE person_scrum_team (
 CREATE TABLE jira_scrum_mapping (
     component_name TEXT NOT NULL, scrum_team TEXT, specialty TEXT
 );
+CREATE TABLE scrum_team_board (
+    id INTEGER PRIMARY KEY,
+    organization TEXT,
+    scrum_team_name TEXT NOT NULL,
+    jira_board_url TEXT,
+    pm TEXT,
+    agilist REAL,
+    architects REAL,
+    bff REAL,
+    backend_engineer REAL,
+    devops REAL,
+    manager REAL,
+    operations_manager REAL,
+    qe REAL,
+    staff_engineers REAL,
+    ui REAL,
+    total_staff REAL
+);
 
 -- Jira issues
 CREATE TABLE jira_issue (
@@ -459,6 +477,62 @@ def parse_jira_scrum_ref(ws) -> list[dict]:
                     "specialty": spec or None,
                 }
             )
+    return rows
+
+
+SCRUM_TEAM_BOARDS_TAB = os.environ.get("GPS_SCRUM_TEAM_BOARDS_TAB", "Scrum Team Boards")
+
+SCRUM_BOARD_COLS = [
+    ("organization", "organization"),
+    ("scrum team name", "scrum_team_name"),
+    ("jira board", "jira_board_url"),
+    ("pm", "pm"),
+    ("agilist", "agilist"),
+    ("architects", "architects"),
+    ("bff", "bff"),
+    ("backend engineer", "backend_engineer"),
+    ("devops", "devops"),
+    ("manager", "manager"),
+    ("operations manager", "operations_manager"),
+    ("qe", "qe"),
+    ("staff engineers", "staff_engineers"),
+    ("ui", "ui"),
+    ("total staff", "total_staff"),
+]
+
+
+def parse_scrum_team_boards(ws) -> list[dict]:
+    headers = [str(c.value or "").strip().lower() for c in ws[1]]
+    col_map = {}
+    for header_key, db_col in SCRUM_BOARD_COLS:
+        idx = next((i for i, h in enumerate(headers) if h.startswith(header_key)), None)
+        if idx is not None:
+            col_map[db_col] = idx
+
+    rows = []
+    current_org = None
+    for row in ws.iter_rows(min_row=2, values_only=True):
+        org_idx = col_map.get("organization")
+        name_idx = col_map.get("scrum_team_name")
+        if name_idx is None or name_idx >= len(row):
+            continue
+        team_name = str(row[name_idx] or "").strip()
+        if not team_name:
+            continue
+
+        if org_idx is not None and org_idx < len(row) and row[org_idx]:
+            current_org = str(row[org_idx]).strip()
+
+        record = {"organization": current_org, "scrum_team_name": team_name}
+        for db_col, idx in col_map.items():
+            if db_col in ("organization", "scrum_team_name"):
+                continue
+            val = row[idx] if idx < len(row) else None
+            if db_col in ("jira_board_url", "pm"):
+                record[db_col] = str(val).strip() if val else None
+            else:
+                record[db_col] = float(val) if val is not None else None
+        rows.append(record)
     return rows
 
 
@@ -1037,6 +1111,19 @@ def build_database(xlsx_path: Path, db_path: Path) -> None:
                 "INSERT INTO jira_scrum_mapping (component_name, scrum_team, specialty) VALUES (?, ?, ?)",
                 (row["component_name"], row["scrum_team"], row["specialty"]),
             )
+    if SCRUM_TEAM_BOARDS_TAB in sheet_names:
+        ws = wb[SCRUM_TEAM_BOARDS_TAB]
+        board_rows = parse_scrum_team_boards(ws)
+        print(f"  {SCRUM_TEAM_BOARDS_TAB}: {len(board_rows)} teams")
+        db_cols = [dc for _, dc in SCRUM_BOARD_COLS]
+        placeholders = ", ".join("?" for _ in db_cols)
+        col_names = ", ".join(db_cols)
+        for row in board_rows:
+            cur.execute(
+                f"INSERT INTO scrum_team_board ({col_names}) VALUES ({placeholders})",
+                tuple(row.get(c) for c in db_cols),
+            )
+
     wb.close()
 
     # --- CSV data sources ---

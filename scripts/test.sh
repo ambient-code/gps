@@ -64,7 +64,7 @@ sys.exit(0 if result == 'ok' else 1)
 "
 
 # 5. Key tables populated
-for table in person jira_issue feature release_schedule governance_document; do
+for table in person jira_issue feature release_schedule governance_document scrum_team_board; do
     run "table: $table has rows" uv run python3 -c "
 import sqlite3, sys
 conn = sqlite3.connect('$DB_PATH')

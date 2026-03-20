@@ -146,6 +146,24 @@ CREATE TABLE scrum_team (
     team_id INTEGER PRIMARY KEY, team_name TEXT UNIQUE NOT NULL,
     pm TEXT, eng_lead TEXT
 );
+CREATE TABLE scrum_team_board (
+    id INTEGER PRIMARY KEY,
+    organization TEXT,
+    scrum_team_name TEXT NOT NULL,
+    jira_board_url TEXT,
+    pm TEXT,
+    agilist REAL,
+    architects REAL,
+    bff REAL,
+    backend_engineer REAL,
+    devops REAL,
+    manager REAL,
+    operations_manager REAL,
+    qe REAL,
+    staff_engineers REAL,
+    ui REAL,
+    total_staff REAL
+);
 CREATE TABLE specialty (
     specialty_id INTEGER PRIMARY KEY, specialty_name TEXT UNIQUE NOT NULL
 );
