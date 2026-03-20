@@ -4,6 +4,7 @@
 # dependencies = [
 #   "openpyxl>=3.1",
 #   "docling>=2.0",
+#   "python-dotenv>=1.0",
 # ]
 # ///
 """Build unified SQLite database from organizational data sources.
@@ -37,6 +38,13 @@ from openpyxl import load_workbook
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent
 DATA_DIR = REPO_ROOT / "data"
+
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(REPO_ROOT / ".env")
+except ModuleNotFoundError:
+    pass
 VERSION_PATH = REPO_ROOT / "VERSION"
 GOVERNANCE_DIR = REPO_ROOT / "governance"
 
@@ -54,18 +62,20 @@ TAB_ORG_MAP = json.loads(os.environ.get("GPS_TAB_ORG_MAP", json.dumps(DEFAULT_TA
 
 JIRA_SCRUM_REF_TAB = os.environ.get("GPS_JIRA_SCRUM_REF_TAB", "Jira and Scrum teams")
 
-EXPECTED_HEADERS = [
-    "associate's name",
-    "manager's name",
-    "miro team name",
-    "primary jira component",
-    "jira team name",
-    "pm",
-    "eng lead",
-    "status",
-    "engineering speciality",
-    "last modified date",
-]
+HEADER_ALIASES: dict[str, list[str]] = {
+    "associate's name": ["associate's name"],
+    "manager's name": ["manager's name"],
+    "miro team name": ["miro team name", "scrum team name"],
+    "primary jira component": ["primary jira component"],
+    "jira team name": ["jira team name", "jira filter"],
+    "pm": ["pm"],
+    "eng lead": ["eng lead"],
+    "status": ["status"],
+    "engineering speciality": ["engineering speciality"],
+    "last modified date": ["last modified date"],
+}
+
+EXPECTED_HEADERS = list(HEADER_ALIASES.keys())
 
 # ---------------------------------------------------------------------------
 # Schema
@@ -350,9 +360,21 @@ def find_xlsx(directory: Path) -> Path | None:
     candidates = sorted(
         (f for f in directory.iterdir() if f.is_file() and f.suffix == ".xlsx"),
         key=lambda f: f.name,
-        reverse=True,
     )
-    return candidates[0] if candidates else None
+    if not candidates:
+        return None
+    # Prefer the file whose sheets match the configured TAB_ORG_MAP
+    expected_tabs = set(TAB_ORG_MAP.keys())
+    for c in candidates:
+        try:
+            wb = load_workbook(c, read_only=True)
+            tabs = set(wb.sheetnames)
+            wb.close()
+            if expected_tabs & tabs:
+                return c
+        except Exception:
+            continue
+    return candidates[0]
 
 
 # ---------------------------------------------------------------------------
@@ -361,9 +383,10 @@ def find_xlsx(directory: Path) -> Path | None:
 
 
 def _match_header(actual: str) -> str | None:
-    for expected in EXPECTED_HEADERS:
-        if actual == expected or actual.startswith(expected):
-            return expected
+    for canonical, aliases in HEADER_ALIASES.items():
+        for alias in aliases:
+            if actual == alias or actual.startswith(alias):
+                return canonical
     return None
 
 
