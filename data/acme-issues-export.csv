@@ -1,0 +1,51 @@
+key,summary,status,priority,assignee,reporter,issuetype,created,updated,labels,components
+ACME-1,Implement REST API versioning,In Progress,Major,Lena Kowalski,Dana Chen,Story,2026-01-05,2026-02-15,backend;api,acme-api
+ACME-2,Fix authentication token refresh race condition,In Review,Critical,Carlos Mendoza,Nikolai Petrov,Bug,2026-01-06,2026-03-01,security;backend,acme-auth
+ACME-3,Design new dashboard layout,Done,Major,Chloe Brennan,Dana Chen,Story,2026-01-07,2026-02-10,frontend;ui,acme-ui
+ACME-4,Add OpenTelemetry tracing to API gateway,To Do,Major,Omar Farouk,Marcus Rivera,Story,2026-01-10,2026-01-10,backend;observability,acme-api
+ACME-5,Data pipeline retry logic for transient failures,In Progress,Critical,Jordan Blake,Priya Nair,Bug,2026-01-12,2026-03-05,backend;reliability,acme-pipeline
+ACME-6,Migrate storage layer to async I/O,In Progress,Major,Derek Nguyen,James Wu,Story,2026-01-15,2026-03-08,backend;performance,acme-storage
+ACME-7,Model serving latency optimization,In Review,Critical,Ava Mitchell,Sarah Kim,Story,2026-01-18,2026-03-10,ml;performance,acme-ml-serve
+ACME-8,Add RBAC to admin endpoints,To Do,Major,Sophie Laurent,Dana Chen,Story,2026-01-20,2026-01-20,security;backend,acme-auth
+ACME-9,Frontend accessibility audit,To Do,Minor,Raj Patel,Dana Chen,Task,2026-01-22,2026-01-22,frontend;accessibility,acme-ui
+ACME-10,Training pipeline GPU memory leak,In Progress,Critical,Ravi Krishnan,Leo Park,Bug,2026-01-25,2026-03-12,ml;bug,acme-ml-train
+ACME-11,Platform infrastructure epic,In Progress,Major,Marcus Rivera,Dana Chen,Epic,2026-01-28,2026-03-01,backend;infrastructure,acme-api
+ACME-12,Implement rate limiting middleware,Done,Major,Lena Kowalski,Marcus Rivera,Story,2026-01-30,2026-02-20,backend;security,acme-api
+ACME-13,Fix CSS grid layout on mobile,Done,Minor,Chloe Brennan,Raj Patel,Bug,2026-02-01,2026-02-15,frontend;mobile,acme-ui
+ACME-14,Add Kafka consumer group monitoring,In Progress,Major,Fatima Al-Rashid,Priya Nair,Story,2026-02-03,2026-03-05,backend;monitoring,acme-pipeline
+ACME-15,Storage compaction job optimization,To Do,Minor,Derek Nguyen,James Wu,Task,2026-02-05,2026-02-05,backend;tech-debt,acme-storage
+ACME-16,OAuth2 PKCE flow implementation,In Progress,Major,Carlos Mendoza,Marcus Rivera,Story,2026-02-07,2026-03-10,security;backend,acme-auth
+ACME-17,Component library Storybook setup,Done,Minor,Raj Patel,Chloe Brennan,Task,2026-02-10,2026-02-28,frontend;tooling,acme-ui
+ACME-18,Pipeline schema validation framework,In Review,Major,Ben Okafor,Priya Nair,Story,2026-02-12,2026-03-08,backend;data-quality,acme-pipeline
+ACME-19,Model A/B testing framework,To Do,Major,Ava Mitchell,Sarah Kim,Story,2026-02-14,2026-02-14,ml;testing,acme-ml-serve
+ACME-20,Training data versioning system,In Progress,Major,Ravi Krishnan,Alex Thompson,Story,2026-02-16,2026-03-12,ml;data-engineering,acme-ml-train
+ACME-21,API documentation generator,Done,Minor,Omar Farouk,Lena Kowalski,Task,2026-02-18,2026-03-01,backend;docs,acme-api
+ACME-22,Fix session invalidation on password change,In Review,Critical,Sophie Laurent,Nikolai Petrov,Bug,2026-02-20,2026-03-10,security;backend,acme-auth
+ACME-23,Dark mode theme support,In Progress,Minor,Mei-Lin Chang,Dana Chen,Story,2026-02-22,2026-03-01,frontend;ui,acme-ui
+ACME-24,Dead letter queue implementation,To Do,Major,Jordan Blake,James Wu,Story,2026-02-24,2026-02-24,backend;reliability,acme-pipeline
+ACME-25,Object storage tiering policy,In Progress,Minor,Yuki Tanaka,Derek Nguyen,Task,2026-02-26,2026-03-10,backend;cost-optimization,acme-storage
+ACME-26,Batch inference endpoint,In Review,Major,Ingrid Svensson,Sarah Kim,Story,2026-02-28,2026-03-12,ml;api,acme-ml-serve
+ACME-27,Hyperparameter search optimization,To Do,Minor,Ravi Krishnan,Alex Thompson,Story,2026-03-01,2026-03-01,ml;performance,acme-ml-train
+ACME-28,GraphQL API layer,To Do,Major,Lena Kowalski,Dana Chen,Epic,2026-03-02,2026-03-02,backend;api,acme-api
+ACME-29,WebSocket connection pooling fix,In Progress,Major,Omar Farouk,Nikolai Petrov,Bug,2026-03-03,2026-03-15,backend;performance,acme-api
+ACME-30,JWT token rotation mechanism,Done,Major,Carlos Mendoza,Marcus Rivera,Story,2026-03-04,2026-03-10,security;backend,acme-auth
+ACME-31,Responsive table component,In Progress,Minor,Chloe Brennan,Raj Patel,Story,2026-03-05,2026-03-15,frontend;ui,acme-ui
+ACME-32,Pipeline backpressure handling,In Review,Major,Fatima Al-Rashid,Jordan Blake,Story,2026-03-06,2026-03-14,backend;reliability,acme-pipeline
+ACME-33,Storage encryption at rest,To Do,Critical,Derek Nguyen,James Wu,Story,2026-03-07,2026-03-07,security;backend,acme-storage
+ACME-34,Model registry integration,In Progress,Major,Ava Mitchell,Alex Thompson,Story,2026-03-08,2026-03-15,ml;infrastructure,acme-ml-serve
+ACME-35,Distributed training support,To Do,Major,Ravi Krishnan,Sarah Kim,Epic,2026-03-09,2026-03-09,ml;infrastructure,acme-ml-train
+ACME-36,API health check endpoints,Done,Trivial,Tomás Herrera,Marcus Rivera,Task,2026-03-10,2026-03-12,backend;devops,acme-api
+ACME-37,LDAP integration for SSO,To Do,Major,Aisha Johnson,Dana Chen,Story,2026-03-11,2026-03-11,security;devops,acme-auth
+ACME-38,Form validation library,Done,Minor,Raj Patel,Chloe Brennan,Task,2026-03-12,2026-03-15,frontend;tooling,acme-ui
+ACME-39,Pipeline DAG visualization,To Do,Minor,Ben Okafor,Priya Nair,Story,2026-03-13,2026-03-13,frontend;data-engineering,acme-pipeline
+ACME-40,Blob storage multipart upload,In Progress,Major,Yuki Tanaka,Derek Nguyen,Story,2026-03-14,2026-03-18,backend;performance,acme-storage
+ACME-41,Feature store integration,To Do,Major,Ingrid Svensson,Sarah Kim,Story,2026-03-15,2026-03-15,ml;data-engineering,acme-ml-serve
+ACME-42,Training checkpoint recovery,In Review,Critical,Leo Park,Ravi Krishnan,Bug,2026-03-16,2026-03-18,ml;reliability,acme-ml-train
+ACME-43,API request validation middleware,Done,Minor,Lena Kowalski,Omar Farouk,Story,2026-01-08,2026-02-05,backend;security,acme-api
+ACME-44,MFA enrollment flow,In Progress,Major,Sophie Laurent,Carlos Mendoza,Story,2026-02-09,2026-03-14,security;frontend,acme-auth
+ACME-45,UI performance profiling,Done,Trivial,Chloe Brennan,Dana Chen,Task,2026-02-11,2026-02-25,frontend;performance,acme-ui
+ACME-46,Pipeline metric aggregation service,In Progress,Major,Jordan Blake,Fatima Al-Rashid,Story,2026-02-13,2026-03-15,backend;monitoring,acme-pipeline
+ACME-47,Storage quota management API,To Do,Minor,Derek Nguyen,Yuki Tanaka,Story,2026-02-15,2026-02-15,backend;api,acme-storage
+ACME-48,Model explainability dashboard,To Do,Major,Ava Mitchell,Sarah Kim,Story,2026-02-17,2026-02-17,ml;frontend,acme-ml-serve
+ACME-49,Training pipeline CI/CD integration,Done,Major,Leo Park,Alex Thompson,Story,2026-02-19,2026-03-05,ml;devops,acme-ml-train
+ACME-50,E2E test suite for auth flows,In Progress,Major,Nikolai Petrov,Aisha Johnson,Task,2026-03-17,2026-03-19,security;testing,acme-auth

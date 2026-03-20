@@ -1,0 +1,13 @@
+,1.0,1.1,2.0,
+AcmeProduct,,,,
+,May-15,Aug-15,Oct-15,Major Version due
+,Apr-16,Jul-16,Sep-16,Code freeze
+,May-15,Aug-15,Oct-15,Release
+Components,,,,
+acme-api,1.0.0,1.1.0,2.0.0,
+acme-ui,1.0.0,1.1.0,2.0.0,
+acme-auth,1.0.0,1.1.0,2.0.0,
+acme-pipeline,,1.0.0,1.1.0,
+acme-storage,,1.0.0,1.1.0,
+acme-ml-serve,,,1.0.0,
+acme-ml-train,,,1.0.0,

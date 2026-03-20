@@ -1,0 +1,55 @@
+catalog:
+  - file: acme-corp-org.xlsx
+    description: >
+      Organizational breakdown of Acme Corp engineering teams. Contains team
+      assignments, Jira component mappings, management hierarchy, and
+      engineering specialties across Platform, Data Services, and ML Engineering.
+    format: xlsx
+    sheets:
+      - "Platform - Team Breakdown"
+      - "Data Services - Team Breakdown"
+      - "ML Engineering - Team Breakdown"
+      - "Jira and Scrum teams"
+    record_count: 20 associates + 7 component mappings
+    last_updated: "2026-03-15"
+    provenance: Fictional example data for GPS project
+
+  - file: acme-issues-export.csv
+    description: >
+      Jira issue export for the ACME project. Includes stories, bugs, tasks,
+      and epics across all seven components with status, priority, and
+      assignment information.
+    format: csv
+    record_count: 50
+    date_range: "2026-01-05 to 2026-03-19"
+    last_updated: "2026-03-19"
+    provenance: Fictional example data for GPS project
+
+  - file: acme-feature-planning.csv
+    description: >
+      Feature-level planning data including RICE scores, release targeting,
+      progress tracking, and cross-functional approval status for AcmeProduct
+      releases 1.0 through 2.0.
+    format: csv
+    record_count: 10
+    last_updated: "2026-03-15"
+    provenance: Fictional example data for GPS project
+
+  - file: acme-release-schedule.csv
+    description: >
+      Release schedule for AcmeProduct covering three releases (1.0, 1.1, 2.0)
+      with planning, development, code freeze, QE, and GA milestones.
+    format: csv
+    record_count: 15
+    date_range: "2026-01-05 to 2026-10-15"
+    last_updated: "2026-03-15"
+    provenance: Fictional example data for GPS project
+
+  - file: acme-component-versions.csv
+    description: >
+      Component version matrix mapping each Acme engineering component to its
+      version in each product release. Includes product-level milestone dates.
+    format: csv
+    record_count: 10
+    last_updated: "2026-03-15"
+    provenance: Fictional example data for GPS project

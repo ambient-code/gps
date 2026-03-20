@@ -1,0 +1,21 @@
+# Data files (user-specific, not tracked)
+data/*.csv
+data/*.xlsx
+data/*.pdf
+data/*.db
+data/*.db-journal
+data/*.db-wal
+data/*.db-shm
+
+# Track example data
+!data/acme-*
+
+# Credentials
+.env
+
+# Generated
+__pycache__/
+*.pyc
+.ruff_cache/
+.venv/
+.DS_Store

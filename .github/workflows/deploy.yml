@@ -1,0 +1,187 @@
+name: Release & Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump_type:
+        description: "Version bump type"
+        required: true
+        default: "patch"
+        type: choice
+        options:
+          - major
+          - minor
+          - patch
+
+concurrency:
+  group: gps-release-deploy
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      new_tag: ${{ steps.bump.outputs.new_tag }}
+      changelog: ${{ steps.changelog.outputs.changelog }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Get latest tag
+        id: latest
+        run: |
+          tag=$(git tag -l 'v*.*.*' --sort=-v:refname | head -1)
+          echo "tag=${tag:-v0.0.0}" >> "$GITHUB_OUTPUT"
+
+      - name: Calculate next version
+        id: bump
+        env:
+          BUMP_TYPE: ${{ inputs.bump_type }}
+          LATEST_TAG: ${{ steps.latest.outputs.tag }}
+        run: |
+          version="${LATEST_TAG#v}"
+          IFS='.' read -r major minor patch <<< "$version"
+          case "$BUMP_TYPE" in
+            major) major=$((major + 1)); minor=0; patch=0 ;;
+            minor) minor=$((minor + 1)); patch=0 ;;
+            patch) patch=$((patch + 1)) ;;
+          esac
+          new_tag="v${major}.${minor}.${patch}"
+          echo "new_tag=$new_tag" >> "$GITHUB_OUTPUT"
+          echo "## Version bump: $LATEST_TAG -> $new_tag" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Generate changelog
+        id: changelog
+        env:
+          LATEST_TAG: ${{ steps.latest.outputs.tag }}
+        run: |
+          if git rev-parse "$LATEST_TAG" >/dev/null 2>&1; then
+            log=$(git log "${LATEST_TAG}..HEAD" --pretty=format:"- %s (%h)" --no-merges)
+          else
+            log=$(git log --pretty=format:"- %s (%h)" --no-merges)
+          fi
+          {
+            echo "changelog<<EOF"
+            echo "$log"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: rickstaa/action-create-tag@v1
+        with:
+          tag: ${{ steps.bump.outputs.new_tag }}
+          message: "Release ${{ steps.bump.outputs.new_tag }}"
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.bump.outputs.new_tag }}
+          name: ${{ steps.bump.outputs.new_tag }}
+          body: |
+            ## Changes
+            ${{ steps.changelog.outputs.changelog }}
+          generate_release_notes: false
+
+  build:
+    needs: release
+    runs-on: ${{ matrix.arch.runner }}
+    strategy:
+      matrix:
+        arch:
+          - { runner: ubuntu-latest, platform: linux/amd64, suffix: amd64 }
+          - { runner: ubuntu-24.04-arm, platform: linux/arm64, suffix: arm64 }
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.release.outputs.new_tag }}
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: quay.io
+          username: ${{ secrets.QUAY_USERNAME }}
+          password: ${{ secrets.QUAY_PASSWORD }}
+
+      - uses: astral-sh/setup-uv@v7
+
+      - name: Build GPS database
+        run: uv run scripts/build_db.py --force
+
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: Containerfile
+          push: true
+          platforms: ${{ matrix.arch.platform }}
+          tags: quay.io/ambient_code/gps:${{ needs.release.outputs.new_tag }}-${{ matrix.arch.suffix }}
+          cache-from: type=gha,scope=build-${{ matrix.arch.suffix }}
+          cache-to: type=gha,mode=max,scope=build-${{ matrix.arch.suffix }}
+
+  merge-manifests:
+    needs: [release, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: quay.io
+          username: ${{ secrets.QUAY_USERNAME }}
+          password: ${{ secrets.QUAY_PASSWORD }}
+
+      - name: Create multi-arch manifest
+        env:
+          TAG: ${{ needs.release.outputs.new_tag }}
+        run: |
+          docker buildx imagetools create -t "quay.io/ambient_code/gps:${TAG}" \
+            "quay.io/ambient_code/gps:${TAG}-amd64" \
+            "quay.io/ambient_code/gps:${TAG}-arm64"
+          docker buildx imagetools create -t "quay.io/ambient_code/gps:latest" \
+            "quay.io/ambient_code/gps:${TAG}-amd64" \
+            "quay.io/ambient_code/gps:${TAG}-arm64"
+
+  deploy:
+    needs: [release, merge-manifests]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.release.outputs.new_tag }}
+
+      - uses: redhat-actions/oc-installer@v1
+
+      - uses: imranismail/setup-kustomize@v3
+        with:
+          kustomize-version: "5.8.1"
+
+      - name: Login to OpenShift
+        run: |
+          oc login --token="${{ secrets.GPS_OPENSHIFT_TOKEN }}" \
+            --server="${{ secrets.GPS_OPENSHIFT_SERVER }}" \
+            --insecure-skip-tls-verify
+
+      - name: Create image pull secret
+        run: |
+          oc create secret docker-registry quay-pull-secret \
+            --docker-server=quay.io \
+            --docker-username="${{ secrets.QUAY_USERNAME }}" \
+            --docker-password="${{ secrets.QUAY_PASSWORD }}" \
+            --namespace=gps --dry-run=client -o yaml | oc apply -f -
+          oc secrets link default quay-pull-secret --for=pull -n gps 2>/dev/null || true
+
+      - name: Deploy to OpenShift
+        env:
+          TAG: ${{ needs.release.outputs.new_tag }}
+        run: |
+          cd deploy/k8s/overlays/openshift
+          kustomize edit set image "python:3.11-slim=quay.io/ambient_code/gps:${TAG}"
+          kustomize build . > /dev/null
+          oc apply -k . -n gps
+          oc rollout status deployment/mcp-server -n gps --timeout=120s
+
+      - name: Show deployment status
+        run: |
+          oc get pods -n gps
+          oc get routes -n gps

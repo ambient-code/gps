@@ -1,0 +1,23 @@
+[project]
+name = "gps"
+version = "0.1.0"
+description = "GPS — read-only caching tier for org and engineering data, served over MCP"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+dependencies = [
+    "mcp[cli]>=1.9",
+    "pydantic>=2.0",
+    "openpyxl>=3.1",
+]
+
+[project.optional-dependencies]
+pdf = ["docling>=2.0"]
+dev = ["ruff>=0.9"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]

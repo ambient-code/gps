@@ -1,0 +1,13 @@
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: mcp-server
+  namespace: gps
+spec:
+  tls:
+    termination: edge
+  to:
+    kind: Service
+    name: mcp-server
+  port:
+    targetPort: http

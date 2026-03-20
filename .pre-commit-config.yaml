@@ -1,0 +1,15 @@
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.7
+    hooks:
+      - id: ruff
+      - id: ruff-format
+        args: [--check]
+  - repo: local
+    hooks:
+      - id: no-secrets
+        name: No secrets in commits
+        entry: bash -c 'if grep -rn -E "(API_TOKEN|API_SECRET|PASSWORD|Bearer |client_secret)" "$@" 2>/dev/null; then echo "Potential secret found!"; exit 1; fi'
+        language: system
+        types: [text]
+        exclude: ^(\.env\.example|\.pre-commit-config\.yaml|\.gitignore)

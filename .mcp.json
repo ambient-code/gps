@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "gps": {
+      "command": "uv",
+      "args": ["run", "--script", "mcp_server.py"]
+    }
+  }
+}
