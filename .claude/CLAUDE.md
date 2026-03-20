@@ -1,4 +1,4 @@
-# GPS - Global Positioning System
+# GPS - Global Positioning System MCP Server
 
 Read-only caching tier for org and engineering data. Materializes people, teams, issues, features, releases, and governance into a SQLite database. Optimized for sub-millisecond agent queries over MCP — no auth, no rate limits.
 

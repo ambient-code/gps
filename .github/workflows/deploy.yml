@@ -168,8 +168,8 @@ jobs:
             --docker-server=quay.io \
             --docker-username="${{ secrets.QUAY_USERNAME }}" \
             --docker-password="${{ secrets.QUAY_PASSWORD }}" \
-            --namespace=gps --dry-run=client -o yaml | oc apply -f -
-          oc secrets link default quay-pull-secret --for=pull -n gps 2>/dev/null || true
+            --namespace=gps-mcp-server --dry-run=client -o yaml | oc apply -f -
+          oc secrets link default quay-pull-secret --for=pull -n gps-mcp-server 2>/dev/null || true
 
       - name: Deploy to OpenShift
         env:
@@ -178,10 +178,10 @@ jobs:
           cd deploy/k8s/overlays/openshift
           kustomize edit set image "python:3.11-slim=quay.io/ambient_code/gps:${TAG}"
           kustomize build . > /dev/null
-          oc apply -k . -n gps
-          oc rollout status deployment/mcp-server -n gps --timeout=120s
+          oc apply -k . -n gps-mcp-server
+          oc rollout status deployment/gps-mcp-server -n gps-mcp-server --timeout=120s
 
       - name: Show deployment status
         run: |
-          oc get pods -n gps
-          oc get routes -n gps
+          oc get pods -n gps-mcp-server
+          oc get routes -n gps-mcp-server

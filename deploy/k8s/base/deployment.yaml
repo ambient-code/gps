@@ -1,25 +1,25 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: mcp-server
-  namespace: gps
+  name: gps-mcp-server
+  namespace: gps-mcp-server
   labels:
-    app: mcp-server
+    app: gps-mcp-server
     app.kubernetes.io/part-of: gps
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: mcp-server
+      app: gps-mcp-server
   template:
     metadata:
       labels:
-        app: mcp-server
+        app: gps-mcp-server
     spec:
       imagePullSecrets:
         - name: quay-pull-secret
       containers:
-        - name: mcp-server
+        - name: gps-mcp-server
           image: python:3.11-slim
           command: ["uv", "run", "mcp_server.py", "--http", "--port", "8000"]
           ports:

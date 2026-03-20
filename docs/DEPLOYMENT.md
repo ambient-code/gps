@@ -100,10 +100,10 @@ Deploy GPS as a Kubernetes Service. Sessions connect via HTTP — useful when ma
 apiVersion: v1
 kind: Service
 metadata:
-  name: gps-mcp
+  name: gps-mcp-server
 spec:
   selector:
-    app: mcp-server
+    app: gps-mcp-server
   ports:
     - port: 8000
       targetPort: 8000
@@ -116,7 +116,7 @@ Point sessions at it:
   "mcpServers": {
     "gps": {
       "type": "streamable-http",
-      "url": "http://gps-mcp.gps.svc:8000/mcp"
+      "url": "http://gps-mcp-server.gps-mcp-server.svc:8000/mcp"
     }
   }
 }
@@ -141,10 +141,10 @@ Build and run:
 uv run scripts/build_db.py --force
 
 # Build container image
-docker build -f Containerfile -t gps .
+docker build --provenance=false --platform=linux/amd64 -f Containerfile -t gps-mcp-server .
 
 # Run
-docker run -p 8000:8000 gps
+docker run -p 8000:8000 gps-mcp-server
 ```
 
 The container exposes HTTP transport on port 8000 with a health check at `/health`.
@@ -171,6 +171,12 @@ deploy/deploy.sh status
 
 # View logs
 deploy/deploy.sh logs
+
+# Build and push to OpenShift internal registry
+IMAGE_REGISTRY=<registry-route> deploy/deploy.sh image --overlay openshift
+
+# Full pipeline: build db + push image + deploy
+IMAGE_REGISTRY=<registry-route> deploy/deploy.sh all --overlay openshift
 ```
 
 ### Overlays
@@ -186,10 +192,15 @@ deploy/deploy.sh apply --overlay openshift
 
 ### Environment
 
-Set `NAMESPACE` to deploy to a specific namespace:
+| Variable | Purpose |
+|----------|---------|
+| `NAMESPACE` | Deploy to a specific namespace |
+| `IMAGE_REGISTRY` | Override container registry host (e.g., OpenShift internal registry route) |
+| `IMAGE` | Override full image reference for apply |
 
 ```bash
 NAMESPACE=my-gps deploy/deploy.sh apply
+IMAGE_REGISTRY=default-route-openshift-image-registry.apps.example.com deploy/deploy.sh image --overlay openshift
 ```
 
 ## MCP Client Configuration
@@ -237,10 +248,10 @@ The `deploy.yml` workflow (manual dispatch only) handles the full release pipeli
 # Ensure secrets are configured, then:
 gh workflow run deploy.yml -f bump_type=minor
 gh run watch
-oc get pods -n gps
+oc get pods -n gps-mcp-server
 ```
 
-The workflow automatically creates a `quay-pull-secret` in the `gps` namespace from the Quay credentials.
+The workflow automatically creates a `quay-pull-secret` in the `gps-mcp-server` namespace from the Quay credentials.
 
 ## Security Notes
 
