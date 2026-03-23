@@ -13,6 +13,9 @@ data/*.db-shm
 # Credentials
 .env
 
+# Docs with org data
+docs/EXAMPLE_QUERIES.md
+
 # Generated
 __pycache__/
 *.pyc
