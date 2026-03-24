@@ -1,4 +1,4 @@
-name: Release & Deploy
+name: Release & Push
 
 on:
   workflow_dispatch:
@@ -142,46 +142,3 @@ jobs:
             "quay.io/ambient_code/gps:${TAG}-amd64" \
             "quay.io/ambient_code/gps:${TAG}-arm64"
 
-  deploy:
-    needs: [release, merge-manifests]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          ref: ${{ needs.release.outputs.new_tag }}
-
-      - uses: redhat-actions/oc-installer@v1
-
-      - uses: imranismail/setup-kustomize@v3
-        with:
-          kustomize-version: "5.8.1"
-
-      - name: Login to OpenShift
-        run: |
-          oc login --token="${{ secrets.GPS_OPENSHIFT_TOKEN }}" \
-            --server="${{ secrets.GPS_OPENSHIFT_SERVER }}" \
-            --insecure-skip-tls-verify
-
-      - name: Create image pull secret
-        run: |
-          oc create secret docker-registry quay-pull-secret \
-            --docker-server=quay.io \
-            --docker-username="${{ secrets.QUAY_USERNAME }}" \
-            --docker-password="${{ secrets.QUAY_PASSWORD }}" \
-            --namespace=gps-mcp-server --dry-run=client -o yaml | oc apply -f -
-          oc secrets link default quay-pull-secret --for=pull -n gps-mcp-server 2>/dev/null || true
-
-      - name: Deploy to OpenShift
-        env:
-          TAG: ${{ needs.release.outputs.new_tag }}
-        run: |
-          cd deploy/k8s/overlays/openshift
-          kustomize edit set image "python:3.11-slim=quay.io/ambient_code/gps:${TAG}"
-          kustomize build . > /dev/null
-          oc apply -k . -n gps-mcp-server
-          oc rollout status deployment/gps-mcp-server -n gps-mcp-server --timeout=120s
-
-      - name: Show deployment status
-        run: |
-          oc get pods -n gps-mcp-server
-          oc get routes -n gps-mcp-server
