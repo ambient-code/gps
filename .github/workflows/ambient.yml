@@ -45,18 +45,15 @@ jobs:
             EMOJI="⚠️"
           fi
 
-          BODY="${EMOJI} **Ambient session ${SESSION_PHASE}** (\`${SESSION_NAME}\`)"
-          if [ -n "$SESSION_RESULT" ]; then
-            BODY="${BODY}
-
-          <details>
-          <summary>Session output</summary>
-
-          ${SESSION_RESULT}
-
-          </details>"
-          fi
+          {
+            printf '%s\n' "${EMOJI} **Ambient session ${SESSION_PHASE}** (\`${SESSION_NAME}\`)"
+            if [ -n "$SESSION_RESULT" ]; then
+              printf '\n<details>\n<summary>Session output</summary>\n\n'
+              printf '%s\n' "$SESSION_RESULT"
+              printf '\n</details>\n'
+            fi
+          } > "$RUNNER_TEMP/comment-body.md"
 
           gh issue comment "${{ github.event.issue.number }}" \
             --repo "${{ github.repository }}" \
-            --body "$BODY"
+            --body-file "$RUNNER_TEMP/comment-body.md"
