@@ -26,7 +26,7 @@ jobs:
           repos: '[{"url": "https://github.com/${{ github.repository }}", "branch": "ambient/issue-${{ github.event.issue.number }}", "autoPush": true}]'
           labels: '{"source": "github-issue", "issue": "${{ github.event.issue.number }}"}'
           wait: 'true'
-          timeout: '30'
+          timeout: '300'
 
       - name: Post result to issue
         if: always()
