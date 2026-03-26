@@ -6,6 +6,7 @@ on:
 
 permissions:
   contents: read
+  issues: write
 
 jobs:
   ambient:
@@ -15,6 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: ambient-code/ambient-action@v0.0.2
+        id: session
         with:
           api-url: ${{ secrets.AMBIENT_API_URL }}
           api-token: ${{ secrets.AMBIENT_BOT_TOKEN }}
@@ -23,3 +25,35 @@ jobs:
           display-name: "Issue #${{ github.event.issue.number }}"
           repos: '[{"url": "https://github.com/${{ github.repository }}", "branch": "ambient/issue-${{ github.event.issue.number }}", "autoPush": true}]'
           labels: '{"source": "github-issue", "issue": "${{ github.event.issue.number }}"}'
+          wait: 'true'
+          timeout: '300'
+
+      - name: Post result to issue
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SESSION_NAME: ${{ steps.session.outputs.session-name }}
+          SESSION_PHASE: ${{ steps.session.outputs.session-phase }}
+          SESSION_RESULT: ${{ steps.session.outputs.session-result }}
+        run: |
+          if [ "$SESSION_PHASE" = "Completed" ]; then
+            EMOJI="✅"
+          elif [ -z "$SESSION_PHASE" ]; then
+            EMOJI="❌"
+            SESSION_PHASE="CreateFailed"
+          else
+            EMOJI="⚠️"
+          fi
+
+          {
+            printf '%s\n' "${EMOJI} **Ambient session ${SESSION_PHASE}** (\`${SESSION_NAME}\`)"
+            if [ -n "$SESSION_RESULT" ]; then
+              printf '\n<details>\n<summary>Session output</summary>\n\n'
+              printf '%s\n' "$SESSION_RESULT"
+              printf '\n</details>\n'
+            fi
+          } > "$RUNNER_TEMP/comment-body.md"
+
+          gh issue comment "${{ github.event.issue.number }}" \
+            --repo "${{ github.repository }}" \
+            --body-file "$RUNNER_TEMP/comment-body.md"
