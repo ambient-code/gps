@@ -65,12 +65,20 @@ sys.exit(0 if result == 'ok' else 1)
 
 # 5. Key tables populated
 for table in person jira_issue feature release_schedule governance_document scrum_team_board; do
-    run "table: $table has rows" uv run python3 -c "
-import sqlite3, sys
+    ROW_COUNT=$(uv run python3 -c "
+import sqlite3
 conn = sqlite3.connect('$DB_PATH')
-count = conn.execute('SELECT COUNT(*) FROM $table').fetchone()[0]
-sys.exit(0 if count > 0 else 1)
-"
+print(conn.execute('SELECT COUNT(*) FROM $table').fetchone()[0])
+")
+    if [ "$ROW_COUNT" -gt 0 ]; then
+        printf "%-40s%s\n" "table: $table has rows" "PASS"
+        PASS=$((PASS + 1))
+    elif [ "$table" = "scrum_team_board" ] && ls "$REPO_ROOT"/data/acme-*.xlsx > /dev/null 2>&1; then
+        printf "%-40s%s\n" "table: $table has rows" "SKIP (acme data lacks tab)"
+    else
+        printf "%-40s%s\n" "table: $table has rows" "FAIL"
+        FAIL=$((FAIL + 1))
+    fi
 done
 
 # 6. Schema diff
