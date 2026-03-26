@@ -14,11 +14,11 @@ jobs:
       contains(fromJSON('["OWNER","MEMBER"]'), github.event.comment.author_association)
     runs-on: ubuntu-latest
     steps:
-      - uses: ambient-code/ambient-action@v2
+      - uses: ambient-code/ambient-action@v0.0.2
         with:
           api-url: ${{ secrets.AMBIENT_API_URL }}
           api-token: ${{ secrets.AMBIENT_BOT_TOKEN }}
-          project: gps-ambient-action
+          project: ambient-team
           prompt: ${{ github.event.comment.body }}
           display-name: "Issue #${{ github.event.issue.number }}"
           repos: '[{"url": "https://github.com/${{ github.repository }}", "branch": "ambient/issue-${{ github.event.issue.number }}", "autoPush": true}]'
