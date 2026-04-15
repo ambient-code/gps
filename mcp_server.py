@@ -47,6 +47,7 @@ mcp = FastMCP(
         "Use list_scrum_team_boards for scrum team staffing data (FTE counts by role). "
         "Use list_documents/get_document/get_document_section for governance docs. "
         "Use cloud_pricing_lookup for AWS/Claude pricing data. "
+        "Use get_direct_reports/get_org_tree/get_management_chain for org hierarchy queries. "
         "All data is read-only."
     ),
 )
@@ -395,6 +396,121 @@ def list_scrum_team_boards(organization: str | None = None) -> str:
         d["roles"] = roles
         teams.append(d)
     return json.dumps({"teams": teams, "count": len(teams)}, default=str)
+
+
+# ---------------------------------------------------------------------------
+# Org hierarchy tools
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool(
+    annotations={"readOnlyHint": True, "openWorldHint": False},
+)
+def get_direct_reports(uid: str) -> str:
+    """List all people who directly report to the given user ID.
+
+    Returns each direct report with their full person detail (name, title, email,
+    location, org, teams). Use this to answer 'who reports to X' questions.
+    """
+    conn = _get_conn()
+    sql = """
+    SELECT
+        p.person_id, p.name, p.user_id, p.manager, p.manager_uid,
+        o.org_name, o.org_key, s.specialty_name AS specialty,
+        p.job_title, p.email, p.location, p.status, p.source, p.last_modified,
+        GROUP_CONCAT(DISTINCT jc.component_name) AS components,
+        GROUP_CONCAT(DISTINCT mt.miro_team_name) AS miro_teams,
+        GROUP_CONCAT(DISTINCT st.team_name) AS scrum_teams
+    FROM person p
+    LEFT JOIN org o ON p.org_id = o.org_id
+    LEFT JOIN specialty s ON p.specialty_id = s.specialty_id
+    LEFT JOIN person_component pc ON p.person_id = pc.person_id
+    LEFT JOIN jira_component jc ON pc.component_id = jc.component_id
+    LEFT JOIN person_miro_team pmt ON p.person_id = pmt.person_id
+    LEFT JOIN miro_team mt ON pmt.miro_team_id = mt.miro_team_id
+    LEFT JOIN person_scrum_team pst ON p.person_id = pst.person_id
+    LEFT JOIN scrum_team st ON pst.team_id = st.team_id
+    WHERE p.manager_uid = ?
+    GROUP BY p.person_id
+    ORDER BY p.name
+    """
+    rows = conn.execute(sql, (uid,)).fetchall()
+    return json.dumps(
+        {"manager_uid": uid, "direct_reports": _rows_to_dicts(rows), "count": len(rows)},
+        default=str,
+    )
+
+
+@mcp.tool(
+    annotations={"readOnlyHint": True, "openWorldHint": False},
+)
+def get_org_tree(uid: str, max_depth: int = 5) -> str:
+    """Get the full organizational tree under a person, recursively.
+
+    Walks down through manager_uid relationships. Returns a flattened list of
+    all people in the org tree with their depth level. Use this to answer
+    'who is in X's org' or 'list everyone under VP xyz'.
+    max_depth limits how deep to recurse (default 5).
+    """
+    conn = _get_conn()
+    sql = """
+    WITH RECURSIVE org_tree AS (
+        SELECT user_id, name, job_title, email, location, manager_uid, 0 AS depth
+        FROM person
+        WHERE user_id = ?
+        UNION ALL
+        SELECT p.user_id, p.name, p.job_title, p.email, p.location, p.manager_uid, ot.depth + 1
+        FROM person p
+        JOIN org_tree ot ON p.manager_uid = ot.user_id
+        WHERE ot.depth < ?
+    )
+    SELECT user_id, name, job_title, email, location, manager_uid, depth
+    FROM org_tree
+    ORDER BY depth, name
+    """
+    rows = conn.execute(sql, (uid, max_depth)).fetchall()
+    cols = ["user_id", "name", "job_title", "email", "location", "manager_uid", "depth"]
+    results = [dict(zip(cols, row)) for row in rows]
+    return json.dumps(
+        {"root_uid": uid, "max_depth": max_depth, "people": results, "count": len(results)},
+        default=str,
+    )
+
+
+@mcp.tool(
+    annotations={"readOnlyHint": True, "openWorldHint": False},
+)
+def get_management_chain(uid: str) -> str:
+    """Get the management chain from a person up to the top of the org.
+
+    Walks up through manager_uid relationships. Returns an ordered list from
+    the person to the top of the org. Use this to answer 'who is the VP over X'
+    or 'what is the reporting chain for X'.
+    """
+    conn = _get_conn()
+    sql = """
+    WITH RECURSIVE chain AS (
+        SELECT user_id, name, job_title, email, location, manager_uid, 0 AS level
+        FROM person
+        WHERE user_id = ?
+        UNION ALL
+        SELECT p.user_id, p.name, p.job_title, p.email, p.location, p.manager_uid, c.level + 1
+        FROM person p
+        JOIN chain c ON c.manager_uid = p.user_id
+        WHERE c.manager_uid IS NOT NULL AND c.manager_uid != ''
+          AND c.level < 20
+    )
+    SELECT user_id, name, job_title, email, location, manager_uid, level
+    FROM chain
+    ORDER BY level
+    """
+    rows = conn.execute(sql, (uid,)).fetchall()
+    cols = ["user_id", "name", "job_title", "email", "location", "manager_uid", "level"]
+    results = [dict(zip(cols, row)) for row in rows]
+    return json.dumps(
+        {"uid": uid, "chain": results, "depth": len(results)},
+        default=str,
+    )
 
 
 @mcp.tool(
