@@ -560,6 +560,15 @@ def get_release_schedule(
                 entry["status"] = "past" if parsed < today else "upcoming"
                 entry["days_away"] = (parsed - today).days
 
+    # Annotate milestone entries with past/future
+    for entry in milestones_list:
+        d = entry.get("event_date")
+        if d:
+            parsed = _parse_date(d)
+            if parsed:
+                entry["status"] = "past" if parsed < today else "upcoming"
+                entry["days_away"] = (parsed - today).days
+
     if not schedule and not milestones_list:
         hints = []
         releases = conn.execute(
