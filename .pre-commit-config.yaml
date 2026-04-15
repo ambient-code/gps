@@ -8,8 +8,12 @@ repos:
   - repo: local
     hooks:
       - id: no-secrets
-        name: No secrets in commits
-        entry: bash -c 'if grep -rn -E "(API_TOKEN|API_SECRET|PASSWORD|Bearer |client_secret)" "$@" 2>/dev/null; then echo "Potential secret found!"; exit 1; fi'
-        language: system
+        name: Check for secrets
+        entry: scripts/check-no-secrets.sh
+        language: script
         types: [text]
-        exclude: ^(\.env\.example|\.pre-commit-config\.yaml|\.gitignore)
+      - id: protected-files
+        name: Check protected files
+        entry: scripts/check-protected-files.sh
+        language: script
+        pass_filenames: false
