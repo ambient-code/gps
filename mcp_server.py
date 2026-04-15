@@ -48,6 +48,7 @@ mcp = FastMCP(
         "Use list_documents/get_document/get_document_section for governance docs. "
         "Use cloud_pricing_lookup for AWS/Claude pricing data. "
         "Use get_direct_reports/get_org_tree/get_management_chain for org hierarchy queries. "
+        "Use github_* tools or query with github.* prefix for GitHub data. "
         "All data is read-only."
     ),
 )
@@ -242,6 +243,15 @@ def catalog_resource() -> str:
 )
 def pricing_schema_resource() -> str:
     return _attached_db_schema("pricing", "uv run scripts/fetch_pricing.py")
+
+
+@mcp.resource(
+    "gps://github-schema",
+    name="GitHub Database Schema",
+    description="DDL and row counts for github.db (when available)",
+)
+def github_schema_resource() -> str:
+    return _attached_db_schema("github", "uv run scripts/fetch_github.py --org YOUR_ORG")
 
 
 # ---------------------------------------------------------------------------
@@ -852,6 +862,350 @@ def rosa_cluster_costs() -> str:
             {"error": "No ROSA cluster data. Run: uv run scripts/fetch_pricing.py (requires oc access)"}
         )
     return json.dumps({"clusters": _rows_to_dicts(rows), "count": len(rows)}, default=str)
+
+
+# ---------------------------------------------------------------------------
+# GitHub tools
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool(
+    annotations={"readOnlyHint": True, "openWorldHint": False},
+)
+def github_org_summary() -> str:
+    """Get org-wide GitHub stats: repos, commits, PRs, issues, releases, contributors, LOC by language.
+
+    Requires github.db to be built via: uv run scripts/fetch_github.py --org YOUR_ORG
+    """
+    conn = _get_conn()
+    if not _db_attached(conn, "github"):
+        return json.dumps(
+            {"error": "github.db not attached. Run: uv run scripts/fetch_github.py --org YOUR_ORG"}
+        )
+
+    stats = conn.execute("SELECT * FROM github.v_gh_org_stats").fetchone()
+    result = dict(stats)
+
+    # Top languages
+    langs = conn.execute(
+        """SELECT language, SUM(bytes) AS total_bytes
+           FROM github.gh_repo_language
+           GROUP BY language ORDER BY total_bytes DESC LIMIT 20"""
+    ).fetchall()
+    result["languages"] = _rows_to_dicts(langs)
+
+    # Top repos by commits
+    top_repos = conn.execute(
+        """SELECT name, commit_count, pr_count, merged_pr_count, issue_count,
+                  contributor_count, total_language_bytes
+           FROM github.v_gh_repo_summary
+           ORDER BY commit_count DESC LIMIT 10"""
+    ).fetchall()
+    result["top_repos"] = _rows_to_dicts(top_repos)
+
+    return json.dumps(result, default=str)
+
+
+@mcp.tool(
+    annotations={"readOnlyHint": True, "openWorldHint": False},
+)
+def search_github_repos(
+    name: str | None = None,
+    language: str | None = None,
+    topic: str | None = None,
+) -> str:
+    """Search GitHub repos by name, language, or topic. All filters are partial match.
+
+    Provide at least one parameter. Returns repo details with language breakdown.
+    """
+    if not any([name, language, topic]):
+        return json.dumps({"error": "Provide at least one of: name, language, topic"})
+
+    conn = _get_conn()
+    if not _db_attached(conn, "github"):
+        return json.dumps(
+            {"error": "github.db not attached. Run: uv run scripts/fetch_github.py --org YOUR_ORG"}
+        )
+
+    conditions, params = [], []
+    if name:
+        conditions.append("r.name LIKE ?")
+        params.append(f"%{name}%")
+    if language:
+        conditions.append(
+            "EXISTS (SELECT 1 FROM github.gh_repo_language l WHERE l.repo_id = r.repo_id AND l.language LIKE ?)"
+        )
+        params.append(f"%{language}%")
+    if topic:
+        conditions.append(
+            "EXISTS (SELECT 1 FROM github.gh_repo_topic t WHERE t.repo_id = r.repo_id AND t.topic LIKE ?)"
+        )
+        params.append(f"%{topic}%")
+
+    where = " AND ".join(conditions)
+    repos = conn.execute(
+        f"""SELECT r.name, r.description, r.html_url, r.default_branch,
+                   r.is_fork, r.is_archived, r.stars, r.forks, r.open_issues,
+                   r.size_kb, r.created_at, r.pushed_at,
+                   r.commit_count, r.pr_count, r.merged_pr_count, r.issue_count,
+                   r.contributor_count, r.topics, r.total_language_bytes
+            FROM github.v_gh_repo_summary r
+            WHERE {where}
+            ORDER BY r.commit_count DESC""",
+        params,
+    ).fetchall()
+
+    results = []
+    for repo in repos:
+        r = dict(repo)
+        # Add language breakdown
+        langs = conn.execute(
+            "SELECT language, bytes FROM github.gh_repo_language "
+            "WHERE repo_id = (SELECT repo_id FROM github.gh_repo WHERE name = ?) "
+            "ORDER BY bytes DESC",
+            (r["name"],),
+        ).fetchall()
+        r["languages"] = _rows_to_dicts(langs)
+        results.append(r)
+
+    return json.dumps({"repos": results, "count": len(results)}, default=str)
+
+
+@mcp.tool(
+    annotations={"readOnlyHint": True, "openWorldHint": False},
+)
+def search_github_commits(
+    repo: str | None = None,
+    author: str | None = None,
+    keyword: str | None = None,
+    since: str | None = None,
+    until: str | None = None,
+    limit: int = 50,
+) -> str:
+    """Search GitHub commits with optional filters. All are case-insensitive partial match.
+
+    Provide at least one filter. since/until are ISO dates (e.g. 2026-03-01).
+    """
+    if not any([repo, author, keyword, since, until]):
+        return json.dumps({"error": "Provide at least one filter"})
+
+    conn = _get_conn()
+    if not _db_attached(conn, "github"):
+        return json.dumps(
+            {"error": "github.db not attached. Run: uv run scripts/fetch_github.py --org YOUR_ORG"}
+        )
+
+    limit = min(limit, MAX_QUERY_ROWS)
+    conditions, params = [], []
+
+    if repo:
+        conditions.append("r.name LIKE ?")
+        params.append(f"%{repo}%")
+    if author:
+        conditions.append("c.author_login LIKE ?")
+        params.append(f"%{author}%")
+    if keyword:
+        conditions.append("c.message LIKE ?")
+        params.append(f"%{keyword}%")
+    if since:
+        conditions.append("c.author_date >= ?")
+        params.append(since)
+    if until:
+        conditions.append("c.author_date <= ?")
+        params.append(until)
+
+    where = " AND ".join(conditions)
+    rows = conn.execute(
+        f"""SELECT r.name AS repo, c.sha, c.author_login, c.author_date, c.message
+            FROM github.gh_commit c
+            JOIN github.gh_repo r ON c.repo_id = r.repo_id
+            WHERE {where}
+            ORDER BY c.author_date DESC
+            LIMIT ?""",
+        [*params, limit],
+    ).fetchall()
+    return json.dumps(
+        {"commits": _rows_to_dicts(rows), "count": len(rows)}, default=str
+    )
+
+
+@mcp.tool(
+    annotations={"readOnlyHint": True, "openWorldHint": False},
+)
+def search_github_prs(
+    repo: str | None = None,
+    state: str | None = None,
+    author: str | None = None,
+    keyword: str | None = None,
+    limit: int = 50,
+) -> str:
+    """Search GitHub pull requests. state can be: open, closed, merged (merged_at IS NOT NULL).
+
+    Provide at least one filter. All text filters are partial match.
+    """
+    if not any([repo, state, author, keyword]):
+        return json.dumps({"error": "Provide at least one filter"})
+
+    conn = _get_conn()
+    if not _db_attached(conn, "github"):
+        return json.dumps(
+            {"error": "github.db not attached. Run: uv run scripts/fetch_github.py --org YOUR_ORG"}
+        )
+
+    limit = min(limit, MAX_QUERY_ROWS)
+    conditions, params = [], []
+
+    if repo:
+        conditions.append("r.name LIKE ?")
+        params.append(f"%{repo}%")
+    if state:
+        if state.lower() == "merged":
+            conditions.append("p.merged_at IS NOT NULL")
+        else:
+            conditions.append("p.state LIKE ?")
+            params.append(f"%{state}%")
+    if author:
+        conditions.append("p.author_login LIKE ?")
+        params.append(f"%{author}%")
+    if keyword:
+        conditions.append("p.title LIKE ?")
+        params.append(f"%{keyword}%")
+
+    where = " AND ".join(conditions)
+    rows = conn.execute(
+        f"""SELECT r.name AS repo, p.number, p.title, p.state, p.author_login,
+                   p.created_at, p.updated_at, p.merged_at,
+                   p.additions, p.deletions, p.changed_files, p.html_url,
+                   (SELECT GROUP_CONCAT(l.label, ', ')
+                    FROM github.gh_pr_label l WHERE l.pr_id = p.pr_id) AS labels,
+                   (SELECT COUNT(*) FROM github.gh_pr_review rv
+                    WHERE rv.pr_id = p.pr_id AND rv.state = 'APPROVED') AS approvals
+            FROM github.gh_pull_request p
+            JOIN github.gh_repo r ON p.repo_id = r.repo_id
+            WHERE {where}
+            ORDER BY p.updated_at DESC
+            LIMIT ?""",
+        [*params, limit],
+    ).fetchall()
+    return json.dumps({"prs": _rows_to_dicts(rows), "count": len(rows)}, default=str)
+
+
+@mcp.tool(
+    annotations={"readOnlyHint": True, "openWorldHint": False},
+)
+def search_github_issues(
+    repo: str | None = None,
+    state: str | None = None,
+    author: str | None = None,
+    keyword: str | None = None,
+    limit: int = 50,
+) -> str:
+    """Search GitHub issues (not PRs). All filters are case-insensitive partial match.
+
+    Provide at least one filter.
+    """
+    if not any([repo, state, author, keyword]):
+        return json.dumps({"error": "Provide at least one filter"})
+
+    conn = _get_conn()
+    if not _db_attached(conn, "github"):
+        return json.dumps(
+            {"error": "github.db not attached. Run: uv run scripts/fetch_github.py --org YOUR_ORG"}
+        )
+
+    limit = min(limit, MAX_QUERY_ROWS)
+    conditions, params = [], []
+
+    if repo:
+        conditions.append("r.name LIKE ?")
+        params.append(f"%{repo}%")
+    if state:
+        conditions.append("i.state LIKE ?")
+        params.append(f"%{state}%")
+    if author:
+        conditions.append("i.author_login LIKE ?")
+        params.append(f"%{author}%")
+    if keyword:
+        conditions.append("i.title LIKE ?")
+        params.append(f"%{keyword}%")
+
+    where = " AND ".join(conditions)
+    rows = conn.execute(
+        f"""SELECT r.name AS repo, i.number, i.title, i.state, i.author_login,
+                   i.created_at, i.updated_at, i.closed_at, i.html_url,
+                   (SELECT GROUP_CONCAT(l.label, ', ')
+                    FROM github.gh_issue_label l WHERE l.issue_id = i.issue_id) AS labels
+            FROM github.gh_issue i
+            JOIN github.gh_repo r ON i.repo_id = r.repo_id
+            WHERE {where}
+            ORDER BY i.updated_at DESC
+            LIMIT ?""",
+        [*params, limit],
+    ).fetchall()
+    return json.dumps({"issues": _rows_to_dicts(rows), "count": len(rows)}, default=str)
+
+
+@mcp.tool(
+    annotations={"readOnlyHint": True, "openWorldHint": False},
+)
+def github_code_stats(repo: str | None = None) -> str:
+    """Get LOC stats by language and weekly code frequency. Per-repo or org-wide.
+
+    Without repo parameter, returns org-wide totals.
+    """
+    conn = _get_conn()
+    if not _db_attached(conn, "github"):
+        return json.dumps(
+            {"error": "github.db not attached. Run: uv run scripts/fetch_github.py --org YOUR_ORG"}
+        )
+
+    result: dict = {}
+
+    if repo:
+        repo_row = conn.execute(
+            "SELECT repo_id, name FROM github.gh_repo WHERE name LIKE ?",
+            (f"%{repo}%",),
+        ).fetchone()
+        if not repo_row:
+            return json.dumps({"error": f"No repo matching '{repo}'"})
+
+        repo_id = repo_row["repo_id"]
+        result["repo"] = repo_row["name"]
+
+        langs = conn.execute(
+            "SELECT language, bytes FROM github.gh_repo_language WHERE repo_id = ? ORDER BY bytes DESC",
+            (repo_id,),
+        ).fetchall()
+        result["languages"] = _rows_to_dicts(langs)
+        result["total_bytes"] = sum(r["bytes"] for r in langs)
+
+        freq = conn.execute(
+            """SELECT week_ts, additions, deletions FROM github.gh_code_frequency
+               WHERE repo_id = ? ORDER BY week_ts DESC LIMIT 52""",
+            (repo_id,),
+        ).fetchall()
+        result["weekly_frequency"] = _rows_to_dicts(freq)
+        result["total_additions"] = sum(r["additions"] for r in freq)
+        result["total_deletions"] = sum(abs(r["deletions"]) for r in freq)
+    else:
+        langs = conn.execute(
+            """SELECT language, SUM(bytes) AS total_bytes, COUNT(DISTINCT repo_id) AS repo_count
+               FROM github.gh_repo_language
+               GROUP BY language ORDER BY total_bytes DESC"""
+        ).fetchall()
+        result["languages"] = _rows_to_dicts(langs)
+        result["total_bytes"] = sum(r["total_bytes"] for r in langs)
+
+        freq = conn.execute(
+            """SELECT week_ts, SUM(additions) AS additions, SUM(deletions) AS deletions
+               FROM github.gh_code_frequency
+               GROUP BY week_ts ORDER BY week_ts DESC LIMIT 52"""
+        ).fetchall()
+        result["weekly_frequency"] = _rows_to_dicts(freq)
+        result["total_additions"] = sum(r["additions"] for r in freq)
+        result["total_deletions"] = sum(abs(r["deletions"]) for r in freq)
+
+    return json.dumps(result, default=str)
 
 
 # ---------------------------------------------------------------------------

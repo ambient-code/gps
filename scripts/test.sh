@@ -125,6 +125,26 @@ conn.execute('SELECT 1 FROM $table LIMIT 1')
     done
 fi
 
+# GitHub DB (optional)
+GITHUB_DB="$REPO_ROOT/data/github.db"
+if [ -f "$GITHUB_DB" ]; then
+    echo ""
+    echo "--- GitHub DB ---"
+    run "github: integrity_check" uv run python3 -c "
+import sqlite3, sys
+conn = sqlite3.connect('$GITHUB_DB')
+result = conn.execute('PRAGMA integrity_check').fetchone()[0]
+sys.exit(0 if result == 'ok' else 1)
+"
+    for table in gh_repo gh_commit gh_pull_request gh_issue gh_user _meta; do
+        run "github: $table exists" uv run python3 -c "
+import sqlite3, sys
+conn = sqlite3.connect('$GITHUB_DB')
+conn.execute('SELECT 1 FROM $table LIMIT 1')
+"
+    done
+fi
+
 # Summary
 echo ""
 echo "=== Results: $PASS passed, $FAIL failed ==="
