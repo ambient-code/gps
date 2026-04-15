@@ -117,9 +117,7 @@ def _attached_db_schema(db_name: str, build_hint: str) -> str:
         count = conn.execute(f"SELECT COUNT(*) FROM {db_name}.[{t['name']}]").fetchone()[0]
         lines.append(f"-- {t['name']}: {count:,} rows")
         lines.append(t["sql"] + ";\n")
-    views = conn.execute(
-        f"SELECT name, sql FROM {db_name}.sqlite_master WHERE type='view' ORDER BY name"
-    ).fetchall()
+    views = conn.execute(f"SELECT name, sql FROM {db_name}.sqlite_master WHERE type='view' ORDER BY name").fetchall()
     if views:
         lines.append(f"\n-- {db_name.upper()} VIEWS\n")
         for v in views:
@@ -795,9 +793,7 @@ def cloud_pricing_lookup(
     """
     conn = _get_conn()
     if not _db_attached(conn, "pricing"):
-        return json.dumps(
-            {"error": "pricing.db not attached. Run: uv run scripts/fetch_pricing.py"}
-        )
+        return json.dumps({"error": "pricing.db not attached. Run: uv run scripts/fetch_pricing.py"})
 
     if not any([provider, service, instance_type, region, model_name, usage_type]):
         return json.dumps({"error": "Provide at least one filter"})
@@ -850,17 +846,11 @@ def rosa_cluster_costs() -> str:
     """
     conn = _get_conn()
     if not _db_attached(conn, "pricing"):
-        return json.dumps(
-            {"error": "pricing.db not attached. Run: uv run scripts/fetch_pricing.py"}
-        )
+        return json.dumps({"error": "pricing.db not attached. Run: uv run scripts/fetch_pricing.py"})
 
-    rows = conn.execute(
-        "SELECT * FROM pricing.v_rosa_estimated_cost ORDER BY estimated_monthly_cost DESC"
-    ).fetchall()
+    rows = conn.execute("SELECT * FROM pricing.v_rosa_estimated_cost ORDER BY estimated_monthly_cost DESC").fetchall()
     if not rows:
-        return json.dumps(
-            {"error": "No ROSA cluster data. Run: uv run scripts/fetch_pricing.py (requires oc access)"}
-        )
+        return json.dumps({"error": "No ROSA cluster data. Run: uv run scripts/fetch_pricing.py (requires oc access)"})
     return json.dumps({"clusters": _rows_to_dicts(rows), "count": len(rows)}, default=str)
 
 
@@ -879,9 +869,7 @@ def github_org_summary() -> str:
     """
     conn = _get_conn()
     if not _db_attached(conn, "github"):
-        return json.dumps(
-            {"error": "github.db not attached. Run: uv run scripts/fetch_github.py --org YOUR_ORG"}
-        )
+        return json.dumps({"error": "github.db not attached. Run: uv run scripts/fetch_github.py --org YOUR_ORG"})
 
     stats = conn.execute("SELECT * FROM github.v_gh_org_stats").fetchone()
     result = dict(stats)
@@ -913,20 +901,21 @@ def search_github_repos(
     name: str | None = None,
     language: str | None = None,
     topic: str | None = None,
+    limit: int = 50,
 ) -> str:
     """Search GitHub repos by name, language, or topic. All filters are partial match.
 
     Provide at least one parameter. Returns repo details with language breakdown.
+    Returns up to `limit` repos (default 50, max 200).
     """
     if not any([name, language, topic]):
         return json.dumps({"error": "Provide at least one of: name, language, topic"})
 
     conn = _get_conn()
     if not _db_attached(conn, "github"):
-        return json.dumps(
-            {"error": "github.db not attached. Run: uv run scripts/fetch_github.py --org YOUR_ORG"}
-        )
+        return json.dumps({"error": "github.db not attached. Run: uv run scripts/fetch_github.py --org YOUR_ORG"})
 
+    limit = min(limit, MAX_QUERY_ROWS)
     conditions, params = [], []
     if name:
         conditions.append("r.name LIKE ?")
@@ -944,28 +933,35 @@ def search_github_repos(
 
     where = " AND ".join(conditions)
     repos = conn.execute(
-        f"""SELECT r.name, r.description, r.html_url, r.default_branch,
+        f"""SELECT r.repo_id, r.name, r.description, r.html_url, r.default_branch,
                    r.is_fork, r.is_archived, r.stars, r.forks, r.open_issues,
                    r.size_kb, r.created_at, r.pushed_at,
                    r.commit_count, r.pr_count, r.merged_pr_count, r.issue_count,
                    r.contributor_count, r.topics, r.total_language_bytes
             FROM github.v_gh_repo_summary r
             WHERE {where}
-            ORDER BY r.commit_count DESC""",
-        params,
+            ORDER BY r.commit_count DESC
+            LIMIT ?""",
+        [*params, limit],
     ).fetchall()
+
+    # Batch-load languages for all repos to avoid N+1 queries
+    repo_ids = [repo["repo_id"] for repo in repos]
+    langs_by_repo: dict[int, list[dict]] = {}
+    if repo_ids:
+        ph = ",".join("?" * len(repo_ids))
+        lang_rows = conn.execute(
+            f"SELECT repo_id, language, bytes FROM github.gh_repo_language WHERE repo_id IN ({ph}) ORDER BY bytes DESC",
+            repo_ids,
+        ).fetchall()
+        for lr in lang_rows:
+            langs_by_repo.setdefault(lr["repo_id"], []).append({"language": lr["language"], "bytes": lr["bytes"]})
 
     results = []
     for repo in repos:
         r = dict(repo)
-        # Add language breakdown
-        langs = conn.execute(
-            "SELECT language, bytes FROM github.gh_repo_language "
-            "WHERE repo_id = (SELECT repo_id FROM github.gh_repo WHERE name = ?) "
-            "ORDER BY bytes DESC",
-            (r["name"],),
-        ).fetchall()
-        r["languages"] = _rows_to_dicts(langs)
+        rid = r.pop("repo_id")
+        r["languages"] = langs_by_repo.get(rid, [])
         results.append(r)
 
     return json.dumps({"repos": results, "count": len(results)}, default=str)
@@ -991,9 +987,7 @@ def search_github_commits(
 
     conn = _get_conn()
     if not _db_attached(conn, "github"):
-        return json.dumps(
-            {"error": "github.db not attached. Run: uv run scripts/fetch_github.py --org YOUR_ORG"}
-        )
+        return json.dumps({"error": "github.db not attached. Run: uv run scripts/fetch_github.py --org YOUR_ORG"})
 
     limit = min(limit, MAX_QUERY_ROWS)
     conditions, params = [], []
@@ -1024,9 +1018,7 @@ def search_github_commits(
             LIMIT ?""",
         [*params, limit],
     ).fetchall()
-    return json.dumps(
-        {"commits": _rows_to_dicts(rows), "count": len(rows)}, default=str
-    )
+    return json.dumps({"commits": _rows_to_dicts(rows), "count": len(rows)}, default=str)
 
 
 @mcp.tool(
@@ -1048,9 +1040,7 @@ def search_github_prs(
 
     conn = _get_conn()
     if not _db_attached(conn, "github"):
-        return json.dumps(
-            {"error": "github.db not attached. Run: uv run scripts/fetch_github.py --org YOUR_ORG"}
-        )
+        return json.dumps({"error": "github.db not attached. Run: uv run scripts/fetch_github.py --org YOUR_ORG"})
 
     limit = min(limit, MAX_QUERY_ROWS)
     conditions, params = [], []
@@ -1109,9 +1099,7 @@ def search_github_issues(
 
     conn = _get_conn()
     if not _db_attached(conn, "github"):
-        return json.dumps(
-            {"error": "github.db not attached. Run: uv run scripts/fetch_github.py --org YOUR_ORG"}
-        )
+        return json.dumps({"error": "github.db not attached. Run: uv run scripts/fetch_github.py --org YOUR_ORG"})
 
     limit = min(limit, MAX_QUERY_ROWS)
     conditions, params = [], []
@@ -1155,9 +1143,7 @@ def github_code_stats(repo: str | None = None) -> str:
     """
     conn = _get_conn()
     if not _db_attached(conn, "github"):
-        return json.dumps(
-            {"error": "github.db not attached. Run: uv run scripts/fetch_github.py --org YOUR_ORG"}
-        )
+        return json.dumps({"error": "github.db not attached. Run: uv run scripts/fetch_github.py --org YOUR_ORG"})
 
     result: dict = {}
 

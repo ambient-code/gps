@@ -239,9 +239,7 @@ def _extract_ondemand_prices(terms: dict, sku: str) -> list[dict]:
     """Extract OnDemand price dimensions for a given SKU."""
     results = []
     on_demand = terms.get("OnDemand", {}).get(sku, {})
-    for _term_key, term_details in (
-        on_demand.items() if isinstance(on_demand, dict) else []
-    ):
+    for _term_key, term_details in on_demand.items() if isinstance(on_demand, dict) else []:
         for _dim_key, dim in term_details.get("priceDimensions", {}).items():
             price_str = dim.get("pricePerUnit", {}).get("USD", "0")
             try:
@@ -286,9 +284,7 @@ def fetch_aws_pricing(regions: list[str], now: str) -> list[dict]:
             try:
                 # Download to temp file to handle large files (EC2 ~150MB/region)
                 with tempfile.NamedTemporaryFile(suffix=".json", delete=True) as tmp:
-                    with httpx.stream(
-                        "GET", url, timeout=300, follow_redirects=True
-                    ) as resp:
+                    with httpx.stream("GET", url, timeout=300, follow_redirects=True) as resp:
                         resp.raise_for_status()
                         total = 0
                         for chunk in resp.iter_bytes(chunk_size=1024 * 1024):
@@ -321,9 +317,7 @@ def fetch_aws_pricing(regions: list[str], now: str) -> list[dict]:
                     continue
 
                 product_fields = parse_product(product)
-                product_desc = (
-                    attrs.get("usagetype", "") + " " + attrs.get("operation", "")
-                ).strip()
+                product_desc = (attrs.get("usagetype", "") + " " + attrs.get("operation", "")).strip()
 
                 for dim in _extract_ondemand_prices(terms, sku):
                     row = {
@@ -495,9 +489,7 @@ def fetch_rosa_instances(now: str) -> list[dict]:
             for node in nodes_data.get("items", []):
                 labels = node.get("metadata", {}).get("labels", {})
                 node_name = node.get("metadata", {}).get("name", "")
-                instance_type = labels.get(
-                    "node.kubernetes.io/instance-type", "unknown"
-                )
+                instance_type = labels.get("node.kubernetes.io/instance-type", "unknown")
                 az = labels.get("topology.kubernetes.io/zone", "")
 
                 role = "worker"
@@ -603,12 +595,8 @@ def upsert_rosa_instances(conn: sqlite3.Connection, rows: list[dict]) -> int:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Fetch cloud pricing into pricing.db")
-    parser.add_argument(
-        "--aws-only", action="store_true", help="Fetch AWS pricing only"
-    )
-    parser.add_argument(
-        "--claude-only", action="store_true", help="Fetch Claude pricing only"
-    )
+    parser.add_argument("--aws-only", action="store_true", help="Fetch AWS pricing only")
+    parser.add_argument("--claude-only", action="store_true", help="Fetch Claude pricing only")
     parser.add_argument("--rosa-only", action="store_true", help="ROSA discovery only")
     parser.add_argument("--skip-rosa", action="store_true", help="Skip ROSA discovery")
     parser.add_argument(

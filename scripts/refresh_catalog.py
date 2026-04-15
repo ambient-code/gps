@@ -54,9 +54,7 @@ SKIP_FILES = {
     "README.md",
 }
 # Also skip any .db files (databases are build artifacts, not cataloged sources)
-JQL_ALIASES_PATH = Path(
-    os.environ.get("JQL_ALIASES_PATH", str(CONFIG_DIR / "jql-aliases.json"))
-)
+JQL_ALIASES_PATH = Path(os.environ.get("JQL_ALIASES_PATH", str(CONFIG_DIR / "jql-aliases.json")))
 SKIP_SUFFIXES = {".bak", ".tmp", ".db-shm", ".db-wal", ".db"}
 
 EXTENSION_SOURCE_MAP = {
@@ -393,17 +391,23 @@ def _jira_search(
         param_dict["nextPageToken"] = next_page_token
     params = urllib.parse.urlencode(param_dict)
     url = f"{jira_url.rstrip('/')}/rest/api/3/search/jql?{params}"
-    basic_cred = base64.b64encode(f"{jira_username}:{jira_token}".encode()).decode()
+    auth_header = "Basic " + base64.b64encode(f"{jira_username}:{jira_token}".encode()).decode()
     req = urllib.request.Request(
         url,
         headers={
-            "Authorization": f"Basic {basic_cred}",
+            "Authorization": auth_header,
             "Accept": "application/json",
             "Accept-Encoding": "gzip",
             "User-Agent": "refresh_catalog/1.0",
         },
     )
-    with urllib.request.urlopen(req, timeout=120) as resp:
+    try:
+        resp = urllib.request.urlopen(req, timeout=120)
+    except urllib.error.HTTPError as exc:
+        raise RuntimeError(f"Jira API returned HTTP {exc.code}") from None
+    except urllib.error.URLError as exc:
+        raise RuntimeError(f"Jira API request failed: {exc.reason}") from None
+    with resp:
         raw = resp.read()
         if resp.headers.get("Content-Encoding") == "gzip":
             import gzip
@@ -412,9 +416,7 @@ def _jira_search(
         return json.loads(raw)
 
 
-def fetch_jira_csv(
-    jql: str, jira_url: str, jira_username: str, jira_token: str
-) -> bytes:
+def fetch_jira_csv(jql: str, jira_url: str, jira_username: str, jira_token: str) -> bytes:
     """Paginated Jira Cloud REST search -> CSV bytes.
 
     Uses token-based pagination via /rest/api/3/search/jql.
@@ -486,9 +488,7 @@ def fetch_jira_csv(
             "created": fields.get("created", ""),
             "updated": fields.get("updated", ""),
             "labels": ",".join(fields.get("labels", [])),
-            "components": ",".join(
-                c.get("name", "") for c in fields.get("components", [])
-            ),
+            "components": ",".join(c.get("name", "") for c in fields.get("components", [])),
         }
         writer.writerow(row)
 
@@ -522,9 +522,7 @@ def atomic_write_bytes(path: Path, data: bytes) -> None:
         raise
 
 
-def refresh_sources(
-    entries: list[dict], aliases_data: dict, dry_run: bool, only: str | None = None
-) -> list[dict]:
+def refresh_sources(entries: list[dict], aliases_data: dict, dry_run: bool, only: str | None = None) -> list[dict]:
     """Fetch fresh data for catalog entries that have upstream sources.
 
     Returns the (possibly modified) entries list with updated filenames/dates.
@@ -538,6 +536,11 @@ def refresh_sources(
     jira_url = os.environ.get("JIRA_URL", "")
     jira_username = os.environ.get("JIRA_USERNAME", "")
     jira_token = os.environ.get("JIRA_API_TOKEN", "")
+    print(
+        f"  Jira credentials: URL={'(set)' if jira_url else '(not set)'}, "
+        f"USERNAME={'(set)' if jira_username else '(not set)'}, "
+        f"API_TOKEN={'(set)' if jira_token else '(not set)'}"
+    )
 
     refreshed = 0
     unchanged = 0
@@ -572,18 +575,14 @@ def refresh_sources(
         try:
             if is_jira:
                 if not jira_url or not jira_username or not jira_token:
-                    print(
-                        f"  ERROR: JIRA_URL, JIRA_USERNAME, and JIRA_API_TOKEN env vars required for: {filename}"
-                    )
+                    print(f"  ERROR: JIRA_URL, JIRA_USERNAME, and JIRA_API_TOKEN env vars required for: {filename}")
                     errors += 1
                     continue
                 if jql_alias in dynamic_alias_keys:
                     print(f"  SKIP (dynamic alias '{jql_alias}'): {filename}")
                     continue
                 if jql_alias not in static_aliases:
-                    print(
-                        f"  ERROR: jql_alias '{jql_alias}' not found in jql-aliases.json: {filename}"
-                    )
+                    print(f"  ERROR: jql_alias '{jql_alias}' not found in jql-aliases.json: {filename}")
                     errors += 1
                     continue
                 jql = static_aliases[jql_alias]["jql"]
@@ -591,7 +590,12 @@ def refresh_sources(
             else:
                 new_data = fetch_url(source_url)
         except Exception as exc:
-            print(f"  ERROR fetching {filename}: {exc}")
+            # Sanitize error message to avoid leaking credentials in tracebacks
+            err_msg = str(exc)
+            for secret in (jira_token, jira_username):
+                if secret:
+                    err_msg = err_msg.replace(secret, "***")
+            print(f"  ERROR fetching {filename}: {err_msg}")
             errors += 1
             continue
 
@@ -603,9 +607,7 @@ def refresh_sources(
 
         # Diff against existing file
         existing_path = DATA_DIR / filename
-        if existing_path.exists() and content_hash(new_data) == file_hash(
-            existing_path
-        ):
+        if existing_path.exists() and content_hash(new_data) == file_hash(existing_path):
             print(f"  Unchanged: {filename}")
             unchanged += 1
             continue
@@ -642,9 +644,7 @@ def refresh_sources(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Refresh DATA_CATALOG.yaml from the filesystem."
-    )
+    parser = argparse.ArgumentParser(description="Refresh DATA_CATALOG.yaml from the filesystem.")
     parser.add_argument(
         "--dry-run",
         action="store_true",
@@ -675,9 +675,7 @@ def main() -> None:
 
         # Build entry list from catalog for refresh
         refresh_entries = list(existing_catalog.values())
-        refresh_sources(
-            refresh_entries, aliases_data, dry_run=args.dry_run, only=args.only
-        )
+        refresh_sources(refresh_entries, aliases_data, dry_run=args.dry_run, only=args.only)
 
         # Re-key catalog after refresh may have changed filenames
         existing_catalog = {e["filename"]: e for e in refresh_entries}
@@ -744,10 +742,7 @@ def main() -> None:
             old_entry = existing_catalog[old_name]
             # Keep entries with a source_url that can be refreshed -- the file
             # may not exist yet because it hasn't been fetched successfully.
-            if (
-                old_entry.get("source_url")
-                and old_entry.get("source_type") in REFRESHABLE_TYPES
-            ):
+            if old_entry.get("source_url") and old_entry.get("source_type") in REFRESHABLE_TYPES:
                 entries.append(old_entry)
             else:
                 removed.append(old_name)

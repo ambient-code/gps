@@ -551,9 +551,7 @@ def fetch_repos(conn: sqlite3.Connection, org: str, now: str) -> list[dict]:
     return repos
 
 
-def fetch_languages(
-    conn: sqlite3.Connection, repo_id: int, name: str, org: str, now: str
-) -> None:
+def fetch_languages(conn: sqlite3.Connection, repo_id: int, name: str, org: str, now: str) -> None:
     """Fetch language breakdown for a repo."""
     langs = gh_api_simple(f"/repos/{org}/{name}/languages")
     if not langs or not isinstance(langs, dict):
@@ -566,13 +564,9 @@ def fetch_languages(
         )
 
 
-def fetch_contributors(
-    conn: sqlite3.Connection, repo_id: int, name: str, org: str, now: str
-) -> None:
+def fetch_contributors(conn: sqlite3.Connection, repo_id: int, name: str, org: str, now: str) -> None:
     """Fetch contributors for a repo."""
-    contribs = gh_api_simple(
-        f"/repos/{org}/{name}/contributors?per_page=100", paginate=True
-    )
+    contribs = gh_api_simple(f"/repos/{org}/{name}/contributors?per_page=100", paginate=True)
     if not contribs or not isinstance(contribs, list):
         return
     for c in contribs:
@@ -639,9 +633,7 @@ def fetch_prs(
     since: str | None = None,
 ) -> None:
     """Fetch pull requests for a repo."""
-    endpoint = (
-        f"/repos/{org}/{name}/pulls?per_page=100&state=all&sort=updated&direction=desc"
-    )
+    endpoint = f"/repos/{org}/{name}/pulls?per_page=100&state=all&sort=updated&direction=desc"
     prs = gh_api_simple(endpoint, paginate=True)
     if not prs or not isinstance(prs, list):
         return
@@ -711,9 +703,7 @@ def fetch_prs(
     print(f"    {fetched} PRs")
 
 
-def fetch_pr_reviews(
-    conn: sqlite3.Connection, repo_id: int, name: str, org: str, now: str
-) -> None:
+def fetch_pr_reviews(conn: sqlite3.Connection, repo_id: int, name: str, org: str, now: str) -> None:
     """Fetch reviews for all PRs in a repo that don't have reviews yet."""
     # Get PRs that have no reviews stored
     prs = conn.execute(
@@ -726,9 +716,7 @@ def fetch_pr_reviews(
 
     review_count = 0
     for pr in prs:
-        reviews = gh_api_simple(
-            f"/repos/{org}/{name}/pulls/{pr['number']}/reviews?per_page=100"
-        )
+        reviews = gh_api_simple(f"/repos/{org}/{name}/pulls/{pr['number']}/reviews?per_page=100")
         if not reviews or not isinstance(reviews, list):
             continue
         for rv in reviews:
@@ -758,9 +746,7 @@ def fetch_issues(
     since: str | None = None,
 ) -> None:
     """Fetch issues (excluding PRs) for a repo."""
-    endpoint = (
-        f"/repos/{org}/{name}/issues?per_page=100&state=all&sort=updated&direction=desc"
-    )
+    endpoint = f"/repos/{org}/{name}/issues?per_page=100&state=all&sort=updated&direction=desc"
     if since:
         endpoint += f"&since={since}"
 
@@ -868,9 +854,7 @@ def fetch_releases(conn: sqlite3.Connection, repo_id: int, name: str, org: str, 
         print(f"    {len(releases)} releases")
 
 
-def fetch_code_frequency(
-    conn: sqlite3.Connection, repo_id: int, name: str, org: str, now: str
-) -> None:
+def fetch_code_frequency(conn: sqlite3.Connection, repo_id: int, name: str, org: str, now: str) -> None:
     """Fetch weekly code frequency stats for a repo."""
     for attempt in range(5):
         data = gh_api_simple(f"/repos/{org}/{name}/stats/code_frequency")
@@ -917,9 +901,7 @@ def process_repo(
     # Determine incremental since for this repo
     repo_since = since
     if not full and not since:
-        row = conn.execute(
-            "SELECT value FROM _meta WHERE key = ?", (f"last_fetch_{name}",)
-        ).fetchone()
+        row = conn.execute("SELECT value FROM _meta WHERE key = ?", (f"last_fetch_{name}",)).fetchone()
         if row:
             repo_since = row[0]
             print(f"  Incremental since {repo_since}")
@@ -963,9 +945,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Fetch GitHub org data into github.db")
     parser.add_argument("--repo", help="Fetch a single repo by name")
     parser.add_argument("--since", help="Fetch from date (ISO 8601, e.g. 2026-03-01)")
-    parser.add_argument(
-        "--full", action="store_true", help="Ignore _meta, fetch all history"
-    )
+    parser.add_argument("--full", action="store_true", help="Ignore _meta, fetch all history")
     parser.add_argument(
         "--skip-commits",
         action="store_true",
@@ -994,9 +974,7 @@ def main() -> None:
                     break
             if not target:
                 target = repo_data
-            skipped = process_repo(
-                conn, target, args.org, now, args.since, args.skip_commits, args.full
-            )
+            skipped = process_repo(conn, target, args.org, now, args.since, args.skip_commits, args.full)
             all_skipped.extend(skipped)
         else:
             # Fetch all repos
@@ -1004,9 +982,7 @@ def main() -> None:
             conn.commit()
             for repo in repos:
                 try:
-                    skipped = process_repo(
-                        conn, repo, args.org, now, args.since, args.skip_commits, args.full
-                    )
+                    skipped = process_repo(conn, repo, args.org, now, args.since, args.skip_commits, args.full)
                     all_skipped.extend(skipped)
                 except KeyboardInterrupt:
                     print("\nInterrupted — committing pending data...")
