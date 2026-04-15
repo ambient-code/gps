@@ -73,6 +73,41 @@ sys.exit(0 if count > 0 else 1)
 "
 done
 
+# 5b. Tool smoke tests
+echo ""
+echo "--- Tools ---"
+run "get_release_schedule(all)" uv run python3 -c "
+import json, sys
+sys.path.insert(0, '$REPO_ROOT')
+import mcp_server
+r = json.loads(mcp_server.get_release_schedule())
+assert r.get('schedule_count', 0) > 0, 'no schedule rows'
+"
+
+run "get_release_schedule(filtered)" uv run python3 -c "
+import json, sys
+sys.path.insert(0, '$REPO_ROOT')
+import mcp_server
+r = json.loads(mcp_server.get_release_schedule(product='Acme', version='1.0', milestone='freeze'))
+assert r.get('schedule_count', 0) > 0, 'no filtered rows'
+"
+
+run "get_release_schedule(no match)" uv run python3 -c "
+import json, sys
+sys.path.insert(0, '$REPO_ROOT')
+import mcp_server
+r = json.loads(mcp_server.get_release_schedule(product='zzz_no_match'))
+assert 'error' in r, 'expected error for no match'
+"
+
+run "release_risk_summary" uv run python3 -c "
+import json, sys
+sys.path.insert(0, '$REPO_ROOT')
+import mcp_server
+r = json.loads(mcp_server.release_risk_summary())
+assert 'releases' in r or 'message' in r, 'unexpected response shape'
+"
+
 # 6. Schema diff
 echo ""
 echo "--- Schema ---"
