@@ -20,7 +20,7 @@ import json
 import os
 import re
 import sqlite3
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from difflib import get_close_matches
 from pathlib import Path
 
@@ -598,11 +598,15 @@ def get_release_schedule(
 @mcp.tool(
     annotations={"readOnlyHint": True, "openWorldHint": False},
 )
-def release_risk_summary(release: str | None = None) -> str:
+def release_risk_summary(release: str | None = None, lookback_days: int = 30) -> str:
     """Assess release risk by comparing milestone dates against feature completion.
 
-    If no release specified, analyzes all releases with upcoming milestones.
+    If no release specified, analyzes all releases with recent or upcoming milestones.
     Flags features under 80% complete when milestone is within 30 days.
+
+    Args:
+        release: Filter to a specific release (fuzzy match on version). Omit for all.
+        lookback_days: Include milestones up to this many days in the past (default 30).
     """
     today = date.today()
     conn = _get_conn()
@@ -621,7 +625,7 @@ def release_risk_summary(release: str | None = None) -> str:
     releases_info = {}
     for m in milestones:
         parsed = _parse_date(m["event_date"], today.year)
-        if not parsed or parsed < today:
+        if not parsed or parsed < today - timedelta(days=lookback_days):
             continue
         key = f"{m['product']} {m['version']}"
         if key not in releases_info:
