@@ -22,7 +22,7 @@ import logging
 import os
 import re
 import sqlite3
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from difflib import get_close_matches
 from pathlib import Path
 
@@ -654,11 +654,130 @@ def get_feature_status(issue_key: str | None = None, title: str | None = None) -
 @mcp.tool(
     annotations={"readOnlyHint": True, "openWorldHint": False},
 )
-def release_risk_summary(release: str | None = None) -> str:
+def get_release_schedule(
+    product: str | None = None,
+    version: str | None = None,
+    milestone: str | None = None,
+) -> str:
+    """Get release schedule dates for any product.
+
+    All parameters are optional and fuzzy-matched (case-insensitive, partial).
+    Returns matching milestones ordered by date, including past dates.
+
+    Args:
+        product: Product name. Examples: "AcmeProduct", "acme".
+        version: Version number. "1.0" also matches "1.0.1", "1.0 EA1", etc.
+        milestone: Milestone type. Examples: "code freeze", "ga", "release", "planning".
+
+    Examples:
+        get_release_schedule(product="acme", version="1.0", milestone="code freeze")
+        get_release_schedule(version="2.0")
+        get_release_schedule(milestone="ga")
+    """
+    conn = _get_conn()
+    today = date.today()
+
+    # --- Query release_schedule table ---
+    sched_conditions: list[str] = []
+    sched_params: list[str] = []
+    if product:
+        sched_conditions.append("release LIKE ?")
+        sched_params.append(f"%{product}%")
+    if version:
+        sched_conditions.append("release LIKE ?")
+        sched_params.append(f"%{version}%")
+    if milestone:
+        sched_conditions.append("task LIKE ?")
+        sched_params.append(f"%{milestone}%")
+
+    sched_where = " AND ".join(sched_conditions) if sched_conditions else "1=1"
+    sched_rows = conn.execute(
+        f"""SELECT release, task AS milestone, date_start, date_finish
+            FROM release_schedule
+            WHERE {sched_where}
+            ORDER BY date_start""",
+        sched_params,
+    ).fetchall()
+
+    # --- Query release_milestone table ---
+    mile_conditions: list[str] = []
+    mile_params: list[str] = []
+    if product:
+        mile_conditions.append("product LIKE ?")
+        mile_params.append(f"%{product}%")
+    if version:
+        mile_conditions.append("version LIKE ?")
+        mile_params.append(f"%{version}%")
+    if milestone:
+        mile_conditions.append("event_type LIKE ?")
+        mile_params.append(f"%{milestone}%")
+
+    mile_where = " AND ".join(mile_conditions) if mile_conditions else "1=1"
+    mile_rows = conn.execute(
+        f"""SELECT product, version, event_type AS milestone, event_date
+            FROM release_milestone
+            WHERE {mile_where}
+            ORDER BY event_date""",
+        mile_params,
+    ).fetchall()
+
+    schedule = _rows_to_dicts(sched_rows)
+    milestones_list = _rows_to_dicts(mile_rows)
+
+    # Annotate schedule entries with past/future
+    for entry in schedule:
+        d = entry.get("date_finish") or entry.get("date_start")
+        if d:
+            parsed = _parse_date(d)
+            if parsed:
+                entry["status"] = "past" if parsed < today else "upcoming"
+                entry["days_away"] = (parsed - today).days
+
+    # Annotate milestone entries with past/future
+    for entry in milestones_list:
+        d = entry.get("event_date")
+        if d:
+            parsed = _parse_date(d)
+            if parsed:
+                entry["status"] = "past" if parsed < today else "upcoming"
+                entry["days_away"] = (parsed - today).days
+
+    if not schedule and not milestones_list:
+        hints = []
+        releases = conn.execute("SELECT DISTINCT release FROM release_schedule ORDER BY release").fetchall()
+        if releases:
+            hints = [r["release"] for r in releases]
+        return json.dumps(
+            {
+                "error": "No matching releases found",
+                "available_releases": hints,
+            }
+        )
+
+    return json.dumps(
+        {
+            "schedule": schedule,
+            "milestones": milestones_list,
+            "schedule_count": len(schedule),
+            "milestone_count": len(milestones_list),
+            "as_of": today.isoformat(),
+        },
+        default=str,
+    )
+
+
+@mcp.tool(
+    annotations={"readOnlyHint": True, "openWorldHint": False},
+)
+def release_risk_summary(release: str | None = None, lookback_days: int = 30) -> str:
     """Assess release risk by comparing milestone dates against feature completion.
 
-    If no release specified, analyzes all releases with upcoming milestones.
+    If no release specified, analyzes all releases with recent or upcoming milestones.
     Flags features under 80% complete when milestone is within 30 days.
+
+    Args:
+        release: Filter to a specific release (fuzzy match on version). Omit for all.
+        lookback_days: Include milestones up to this many days in the past (default 30).
     """
     today = date.today()
     conn = _get_conn()
@@ -677,7 +796,7 @@ def release_risk_summary(release: str | None = None) -> str:
     releases_info = {}
     for m in milestones:
         parsed = _parse_date(m["event_date"], today.year)
-        if not parsed or parsed < today:
+        if not parsed or parsed < today - timedelta(days=lookback_days):
             continue
         key = f"{m['product']} {m['version']}"
         if key not in releases_info:
