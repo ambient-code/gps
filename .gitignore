@@ -10,6 +10,9 @@ data/*.db-shm
 # Track example data
 !data/acme-*
 
+# Local extensions (not tracked upstream)
+extensions/
+
 # Credentials
 .env
 

@@ -12,6 +12,7 @@ Read-only caching tier for org and engineering data. Materializes people, teams,
 ## Commands
 ```bash
 uv run scripts/build_db.py --force           # rebuild database
+uv run scripts/fetch_pricing.py              # fetch cloud pricing → data/pricing.db
 scripts/test.sh                              # run test suite
 uv run mcp_server.py                         # start MCP server (stdio)
 uv run mcp_server.py --http                  # start MCP server (HTTP :8000)

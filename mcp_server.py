@@ -16,7 +16,9 @@ Run: uv run mcp_server.py              # stdio (Claude Code / ACP)
 """
 
 import argparse
+import importlib
 import json
+import logging
 import os
 import re
 import sqlite3
@@ -44,6 +46,7 @@ mcp = FastMCP(
         "component mappings, scrum team boards, and governance documents with sub-ms latency. "
         "Use list_scrum_team_boards for scrum team staffing data (FTE counts by role). "
         "Use list_documents/get_document/get_document_section for governance docs. "
+        "Use cloud_pricing_lookup for AWS/Claude pricing data. "
         "All data is read-only."
     ),
 )
@@ -77,12 +80,49 @@ def _get_conn() -> sqlite3.Connection:
     conn.execute("PRAGMA mmap_size = 268435456")
     conn.execute("PRAGMA cache_size = -64000")
     conn.execute("PRAGMA temp_store = MEMORY")
+    # Attach optional databases if they exist
+    for db_name in ("pricing", "github"):
+        db_path = DB_PATH.parent / f"{db_name}.db"
+        if db_path.exists():
+            conn.execute(f"ATTACH DATABASE 'file:{db_path}?mode=ro' AS {db_name}")
     _conn = conn
     return conn
 
 
 def _rows_to_dicts(rows: list[sqlite3.Row]) -> list[dict]:
     return [dict(r) for r in rows]
+
+
+def _db_attached(conn: sqlite3.Connection, name: str) -> bool:
+    """Check if a database is attached."""
+    try:
+        conn.execute(f"SELECT 1 FROM {name}.sqlite_master LIMIT 1")
+        return True
+    except sqlite3.OperationalError:
+        return False
+
+
+def _attached_db_schema(db_name: str, build_hint: str) -> str:
+    """Return schema DDL + row counts for an attached database."""
+    conn = _get_conn()
+    if not _db_attached(conn, db_name):
+        return f"{db_name}.db is not attached. Run: {build_hint}"
+    lines = [f"-- {db_name.upper()} TABLES\n"]
+    tables = conn.execute(
+        f"SELECT name, sql FROM {db_name}.sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
+    ).fetchall()
+    for t in tables:
+        count = conn.execute(f"SELECT COUNT(*) FROM {db_name}.[{t['name']}]").fetchone()[0]
+        lines.append(f"-- {t['name']}: {count:,} rows")
+        lines.append(t["sql"] + ";\n")
+    views = conn.execute(
+        f"SELECT name, sql FROM {db_name}.sqlite_master WHERE type='view' ORDER BY name"
+    ).fetchall()
+    if views:
+        lines.append(f"\n-- {db_name.upper()} VIEWS\n")
+        for v in views:
+            lines.append(v["sql"] + ";\n")
+    return "\n".join(lines)
 
 
 def _normalize_release(release: str) -> tuple[str, str]:
@@ -192,6 +232,15 @@ def catalog_resource() -> str:
     if CATALOG_PATH.exists():
         return CATALOG_PATH.read_text()
     return "DATA_CATALOG.yaml not found."
+
+
+@mcp.resource(
+    "gps://pricing-schema",
+    name="Cloud Pricing Database Schema",
+    description="DDL and row counts for pricing.db (when available)",
+)
+def pricing_schema_resource() -> str:
+    return _attached_db_schema("pricing", "uv run scripts/fetch_pricing.py")
 
 
 # ---------------------------------------------------------------------------
@@ -591,6 +640,105 @@ def release_risk_summary(release: str | None = None) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Cloud pricing tools
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool(
+    annotations={"readOnlyHint": True, "openWorldHint": False},
+)
+def cloud_pricing_lookup(
+    provider: str | None = None,
+    service: str | None = None,
+    instance_type: str | None = None,
+    region: str | None = None,
+    model_name: str | None = None,
+    usage_type: str | None = None,
+    limit: int = 50,
+) -> str:
+    """Look up cloud pricing for AWS services or Claude models.
+
+    Filters (all optional, case-insensitive partial match):
+      provider: 'aws' or 'anthropic'
+      service: 'ec2', 's3', 'ebs', 'elb', 'data_transfer', 'vertex_ai'
+      instance_type: e.g. 'm5.xlarge'
+      region: e.g. 'us-east-1'
+      model_name: e.g. 'claude-sonnet-4'
+      usage_type: 'OnDemand', 'per-token-input', 'per-token-output'
+    Provide at least one filter. Results capped at limit (default 50, max 200).
+    """
+    conn = _get_conn()
+    if not _db_attached(conn, "pricing"):
+        return json.dumps(
+            {"error": "pricing.db not attached. Run: uv run scripts/fetch_pricing.py"}
+        )
+
+    if not any([provider, service, instance_type, region, model_name, usage_type]):
+        return json.dumps({"error": "Provide at least one filter"})
+
+    limit = min(limit, MAX_QUERY_ROWS)
+    conditions, params = [], []
+
+    if provider:
+        conditions.append("provider = ?")
+        params.append(provider.lower())
+    if service:
+        conditions.append("service = ?")
+        params.append(service.lower())
+    if instance_type:
+        conditions.append("instance_type LIKE ?")
+        params.append(f"%{instance_type}%")
+    if region:
+        conditions.append("region LIKE ?")
+        params.append(f"%{region}%")
+    if model_name:
+        conditions.append("model_name LIKE ?")
+        params.append(f"%{model_name}%")
+    if usage_type:
+        conditions.append("usage_type LIKE ?")
+        params.append(f"%{usage_type}%")
+
+    where = " AND ".join(conditions)
+    sql = f"""
+    SELECT provider, service, region, instance_type, instance_family,
+           vcpu, memory_gb, storage_type, usage_type, unit,
+           price_per_unit, model_name, description, effective_date
+    FROM pricing.cloud_pricing
+    WHERE {where}
+    ORDER BY provider, service, price_per_unit
+    LIMIT ?
+    """
+    params.append(limit)
+    rows = conn.execute(sql, params).fetchall()
+    return json.dumps({"pricing": _rows_to_dicts(rows), "count": len(rows)}, default=str)
+
+
+@mcp.tool(
+    annotations={"readOnlyHint": True, "openWorldHint": False},
+)
+def rosa_cluster_costs() -> str:
+    """Get estimated monthly costs for OpenShift/ROSA cluster nodes.
+
+    Joins instance types with EC2 pricing to estimate costs.
+    Requires pricing.db with both AWS pricing and ROSA cluster discovery data.
+    """
+    conn = _get_conn()
+    if not _db_attached(conn, "pricing"):
+        return json.dumps(
+            {"error": "pricing.db not attached. Run: uv run scripts/fetch_pricing.py"}
+        )
+
+    rows = conn.execute(
+        "SELECT * FROM pricing.v_rosa_estimated_cost ORDER BY estimated_monthly_cost DESC"
+    ).fetchall()
+    if not rows:
+        return json.dumps(
+            {"error": "No ROSA cluster data. Run: uv run scripts/fetch_pricing.py (requires oc access)"}
+        )
+    return json.dumps({"clusters": _rows_to_dicts(rows), "count": len(rows)}, default=str)
+
+
+# ---------------------------------------------------------------------------
 # Governance tools
 # ---------------------------------------------------------------------------
 
@@ -698,6 +846,20 @@ def get_gps_version() -> str:
     except sqlite3.Error:
         return json.dumps(result, default=str)
 
+
+# ---------------------------------------------------------------------------
+# Local extensions (not tracked upstream)
+# ---------------------------------------------------------------------------
+
+_ext_dir = Path(__file__).resolve().parent / "extensions"
+if _ext_dir.is_dir():
+    for _ext in sorted(_ext_dir.glob("*.py")):
+        if _ext.name.startswith("_"):
+            continue
+        try:
+            importlib.import_module(f"extensions.{_ext.stem}")
+        except Exception as _e:
+            logging.getLogger(__name__).warning("Failed to load extension %s: %s", _ext.name, _e)
 
 # ---------------------------------------------------------------------------
 # Entry point
