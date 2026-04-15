@@ -571,9 +571,7 @@ def get_release_schedule(
 
     if not schedule and not milestones_list:
         hints = []
-        releases = conn.execute(
-            "SELECT DISTINCT release FROM release_schedule ORDER BY release"
-        ).fetchall()
+        releases = conn.execute("SELECT DISTINCT release FROM release_schedule ORDER BY release").fetchall()
         if releases:
             hints = [r["release"] for r in releases]
         return json.dumps(
