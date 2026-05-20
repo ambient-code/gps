@@ -151,7 +151,7 @@ conn = sqlite3.connect('$PRICING_DB')
 result = conn.execute('PRAGMA integrity_check').fetchone()[0]
 sys.exit(0 if result == 'ok' else 1)
 "
-    for table in cloud_pricing rosa_cluster_instance _meta; do
+    for table in cloud_pricing _meta; do
         run "pricing: $table exists" uv run python3 -c "
 import sqlite3, sys
 conn = sqlite3.connect('$PRICING_DB')

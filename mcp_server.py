@@ -954,25 +954,6 @@ def cloud_pricing_lookup(
     return json.dumps({"pricing": _rows_to_dicts(rows), "count": len(rows)}, default=str)
 
 
-@mcp.tool(
-    annotations={"readOnlyHint": True, "openWorldHint": False},
-)
-def rosa_cluster_costs() -> str:
-    """Get estimated monthly costs for OpenShift/ROSA cluster nodes.
-
-    Joins instance types with EC2 pricing to estimate costs.
-    Requires pricing.db with both AWS pricing and ROSA cluster discovery data.
-    """
-    conn = _get_conn()
-    if not _db_attached(conn, "pricing"):
-        return json.dumps({"error": "pricing.db not attached. Run: uv run scripts/fetch_pricing.py"})
-
-    rows = conn.execute("SELECT * FROM pricing.v_rosa_estimated_cost ORDER BY estimated_monthly_cost DESC").fetchall()
-    if not rows:
-        return json.dumps({"error": "No ROSA cluster data. Run: uv run scripts/fetch_pricing.py (requires oc access)"})
-    return json.dumps({"clusters": _rows_to_dicts(rows), "count": len(rows)}, default=str)
-
-
 # ---------------------------------------------------------------------------
 # GitHub tools
 # ---------------------------------------------------------------------------
