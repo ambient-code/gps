@@ -12,7 +12,6 @@ ELB, NAT Gateway, Data Transfer) and Claude model token pricing.
 
 AWS: fetches from public pricing bulk JSON files (no auth needed).
 Claude: uses published Anthropic per-token pricing (hardcoded, no API needed).
-ROSA: uses `oc get nodes` via subprocess (optional, skipped if oc unavailable).
 
 A discount factor (e.g., 0.85 for 15% off) can be stored via --discount.
 All list prices are stored at face value; discount is applied in views.
@@ -21,8 +20,6 @@ Usage:
     uv run scripts/fetch_pricing.py                      # fetch all
     uv run scripts/fetch_pricing.py --aws-only           # AWS pricing only
     uv run scripts/fetch_pricing.py --claude-only        # Claude model pricing only
-    uv run scripts/fetch_pricing.py --rosa-only          # ROSA cluster discovery only
-    uv run scripts/fetch_pricing.py --skip-rosa          # skip ROSA (no oc needed)
     uv run scripts/fetch_pricing.py --regions us-east-1  # single region
     uv run scripts/fetch_pricing.py --discount 0.85      # set 15% discount factor
 """
@@ -30,7 +27,6 @@ Usage:
 import argparse
 import json
 import sqlite3
-import subprocess
 import sys
 import tempfile
 from datetime import datetime, timezone
@@ -74,6 +70,25 @@ CLAUDE_PRICING = [
     {"model": "claude-3-haiku", "input_per_mtok": 0.25, "output_per_mtok": 1.25},
 ]
 
+# ROSA managed service fees (on top of EC2 infrastructure costs)
+# Source: https://aws.amazon.com/rosa/pricing/
+ROSA_SERVICE_FEES = [
+    {
+        "sku": "rosa-worker-fee",
+        "description": "ROSA managed service fee per worker node per hour",
+        "usage_type": "ROSA-Worker",
+        "unit": "Hrs",
+        "price_per_unit": 0.171,
+    },
+    {
+        "sku": "rosa-hcp-cluster-fee",
+        "description": "ROSA HCP cluster management fee per cluster per hour",
+        "usage_type": "ROSA-HCP-Cluster",
+        "unit": "Hrs",
+        "price_per_unit": 0.25,
+    },
+]
+
 
 # ---------------------------------------------------------------------------
 # Schema
@@ -104,17 +119,6 @@ CREATE TABLE IF NOT EXISTS cloud_pricing (
     UNIQUE(provider, service, region, sku, usage_type, unit, tier_start)
 );
 
-CREATE TABLE IF NOT EXISTS rosa_cluster_instance (
-    cluster_name TEXT NOT NULL,
-    environment  TEXT,
-    node_name    TEXT NOT NULL,
-    instance_type TEXT NOT NULL,
-    role         TEXT,
-    availability_zone TEXT,
-    fetched_at   TEXT NOT NULL,
-    PRIMARY KEY (cluster_name, node_name)
-);
-
 CREATE TABLE IF NOT EXISTS _meta (
     key   TEXT PRIMARY KEY,
     value TEXT
@@ -125,8 +129,6 @@ CREATE INDEX IF NOT EXISTS idx_pricing_provider_service ON cloud_pricing(provide
 CREATE INDEX IF NOT EXISTS idx_pricing_instance_type ON cloud_pricing(instance_type);
 CREATE INDEX IF NOT EXISTS idx_pricing_region ON cloud_pricing(region);
 CREATE INDEX IF NOT EXISTS idx_pricing_model ON cloud_pricing(model_name);
-CREATE INDEX IF NOT EXISTS idx_rosa_instance_type ON rosa_cluster_instance(instance_type);
-
 -- Views (discount_factor from _meta, defaults to 1.0)
 CREATE VIEW IF NOT EXISTS v_ec2_ondemand AS
 SELECT instance_type, instance_family, vcpu, memory_gb, region,
@@ -140,20 +142,6 @@ SELECT instance_type, instance_family, vcpu, memory_gb, region,
 FROM cloud_pricing
 WHERE provider = 'aws' AND service = 'ec2' AND usage_type = 'OnDemand'
 ORDER BY instance_family, vcpu;
-
-CREATE VIEW IF NOT EXISTS v_rosa_estimated_cost AS
-SELECT r.cluster_name, r.environment, r.instance_type, r.role,
-       COUNT(*) AS node_count,
-       p.price_per_unit AS list_hourly_per_node,
-       ROUND(COUNT(*) * p.price_per_unit * COALESCE(
-           (SELECT CAST(value AS REAL) FROM _meta WHERE key = 'discount_factor'), 1.0
-       ) * 730, 2) AS estimated_monthly_cost
-FROM rosa_cluster_instance r
-LEFT JOIN cloud_pricing p ON r.instance_type = p.instance_type
-    AND p.provider = 'aws' AND p.service = 'ec2'
-    AND p.usage_type = 'OnDemand'
-    AND p.region = SUBSTR(r.availability_zone, 1, LENGTH(r.availability_zone) - 1)
-GROUP BY r.cluster_name, r.environment, r.instance_type, r.role;
 
 CREATE VIEW IF NOT EXISTS v_vertex_ai_pricing AS
 SELECT model_name, description, usage_type, unit, price_per_unit,
@@ -239,7 +227,9 @@ def _extract_ondemand_prices(terms: dict, sku: str) -> list[dict]:
     """Extract OnDemand price dimensions for a given SKU."""
     results = []
     on_demand = terms.get("OnDemand", {}).get(sku, {})
-    for _term_key, term_details in on_demand.items() if isinstance(on_demand, dict) else []:
+    for _term_key, term_details in (
+        on_demand.items() if isinstance(on_demand, dict) else []
+    ):
         for _dim_key, dim in term_details.get("priceDimensions", {}).items():
             price_str = dim.get("pricePerUnit", {}).get("USD", "0")
             try:
@@ -284,7 +274,9 @@ def fetch_aws_pricing(regions: list[str], now: str) -> list[dict]:
             try:
                 # Download to temp file to handle large files (EC2 ~150MB/region)
                 with tempfile.NamedTemporaryFile(suffix=".json", delete=True) as tmp:
-                    with httpx.stream("GET", url, timeout=300, follow_redirects=True) as resp:
+                    with httpx.stream(
+                        "GET", url, timeout=300, follow_redirects=True
+                    ) as resp:
                         resp.raise_for_status()
                         total = 0
                         for chunk in resp.iter_bytes(chunk_size=1024 * 1024):
@@ -317,7 +309,9 @@ def fetch_aws_pricing(regions: list[str], now: str) -> list[dict]:
                     continue
 
                 product_fields = parse_product(product)
-                product_desc = (attrs.get("usagetype", "") + " " + attrs.get("operation", "")).strip()
+                product_desc = (
+                    attrs.get("usagetype", "") + " " + attrs.get("operation", "")
+                ).strip()
 
                 for dim in _extract_ondemand_prices(terms, sku):
                     row = {
@@ -410,117 +404,39 @@ def fetch_claude_pricing(now: str) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
-# ROSA cluster instance discovery
+# ROSA service fees — static rates from aws.amazon.com/rosa/pricing/
 # ---------------------------------------------------------------------------
 
 
-def _oc_get_contexts() -> list[dict]:
-    """Get oc/kubectl contexts."""
-    try:
-        result = subprocess.run(
-            ["oc", "config", "get-contexts", "-o", "name"],
-            capture_output=True,
-            text=True,
-            timeout=10,
+def fetch_rosa_service_fees(now: str) -> list[dict]:
+    """Generate ROSA service fee rows from published AWS rates."""
+    rows: list[dict] = []
+    for fee in ROSA_SERVICE_FEES:
+        rows.append(
+            {
+                "provider": "aws",
+                "service": "rosa",
+                "region": "global",
+                "sku": fee["sku"],
+                "description": fee["description"],
+                "instance_type": None,
+                "instance_family": None,
+                "vcpu": None,
+                "memory_gb": None,
+                "storage_type": None,
+                "usage_type": fee["usage_type"],
+                "unit": fee["unit"],
+                "price_per_unit": fee["price_per_unit"],
+                "currency": "USD",
+                "effective_date": now[:10],
+                "model_name": None,
+                "tier_start": None,
+                "tier_end": None,
+                "fetched_at": now,
+            }
         )
-        if result.returncode != 0:
-            return []
-        names = [n.strip() for n in result.stdout.strip().splitlines() if n.strip()]
-        contexts = []
-        for name in names:
-            parts = name.split("/")
-            cluster_url = parts[1] if len(parts) > 1 else name
-            env = "unknown"
-            for env_name in ("prod", "stage", "staging", "uat", "dev"):
-                if env_name in cluster_url.lower():
-                    env = env_name
-                    break
-            contexts.append(
-                {
-                    "name": name,
-                    "cluster_url": cluster_url,
-                    "environment": env,
-                }
-            )
-        return contexts
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        return []
-
-
-def fetch_rosa_instances(now: str) -> list[dict]:
-    """Discover instance types from ROSA clusters via oc."""
-    try:
-        result = subprocess.run(
-            ["oc", "version", "--client"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        if result.returncode != 0:
-            print("  oc CLI not available, skipping ROSA discovery", file=sys.stderr)
-            return []
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        print("  oc CLI not available, skipping ROSA discovery", file=sys.stderr)
-        return []
-
-    contexts = _oc_get_contexts()
-    if not contexts:
-        print("  No oc contexts found, skipping ROSA discovery")
-        return []
-
-    all_rows: list[dict] = []
-    for ctx in contexts:
-        cluster_name = ctx["cluster_url"]
-        env = ctx["environment"]
-        print(f"  Discovering nodes in {cluster_name} ({env})...")
-
-        try:
-            result = subprocess.run(
-                ["oc", "get", "nodes", "--context", ctx["name"], "-o", "json"],
-                capture_output=True,
-                text=True,
-                timeout=30,
-            )
-            if result.returncode != 0:
-                print(f"    ERROR: {result.stderr.strip()[:200]}", file=sys.stderr)
-                continue
-
-            nodes_data = json.loads(result.stdout)
-            for node in nodes_data.get("items", []):
-                labels = node.get("metadata", {}).get("labels", {})
-                node_name = node.get("metadata", {}).get("name", "")
-                instance_type = labels.get("node.kubernetes.io/instance-type", "unknown")
-                az = labels.get("topology.kubernetes.io/zone", "")
-
-                role = "worker"
-                for label_key in labels:
-                    if "master" in label_key or "control-plane" in label_key:
-                        role = "master"
-                        break
-                    if "infra" in label_key:
-                        role = "infra"
-                        break
-
-                all_rows.append(
-                    {
-                        "cluster_name": cluster_name,
-                        "environment": env,
-                        "node_name": node_name,
-                        "instance_type": instance_type,
-                        "role": role,
-                        "availability_zone": az,
-                        "fetched_at": now,
-                    }
-                )
-
-            print(f"    {len(nodes_data.get('items', []))} nodes")
-
-        except json.JSONDecodeError:
-            print("    ERROR: failed to parse node JSON", file=sys.stderr)
-        except subprocess.TimeoutExpired:
-            print(f"    ERROR: oc timed out for {cluster_name}", file=sys.stderr)
-
-    return all_rows
+    print(f"    {len(rows)} ROSA service fee entries")
+    return rows
 
 
 # ---------------------------------------------------------------------------
@@ -564,30 +480,6 @@ def upsert_pricing(conn: sqlite3.Connection, rows: list[dict]) -> int:
     return count
 
 
-def upsert_rosa_instances(conn: sqlite3.Connection, rows: list[dict]) -> int:
-    """Upsert ROSA cluster instance rows."""
-    count = 0
-    for row in rows:
-        conn.execute(
-            """INSERT INTO rosa_cluster_instance (
-                   cluster_name, environment, node_name, instance_type,
-                   role, availability_zone, fetched_at
-               ) VALUES (
-                   :cluster_name, :environment, :node_name, :instance_type,
-                   :role, :availability_zone, :fetched_at
-               )
-               ON CONFLICT(cluster_name, node_name) DO UPDATE SET
-                   environment=excluded.environment,
-                   instance_type=excluded.instance_type,
-                   role=excluded.role,
-                   availability_zone=excluded.availability_zone,
-                   fetched_at=excluded.fetched_at""",
-            row,
-        )
-        count += 1
-    return count
-
-
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -595,10 +487,12 @@ def upsert_rosa_instances(conn: sqlite3.Connection, rows: list[dict]) -> int:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Fetch cloud pricing into pricing.db")
-    parser.add_argument("--aws-only", action="store_true", help="Fetch AWS pricing only")
-    parser.add_argument("--claude-only", action="store_true", help="Fetch Claude pricing only")
-    parser.add_argument("--rosa-only", action="store_true", help="ROSA discovery only")
-    parser.add_argument("--skip-rosa", action="store_true", help="Skip ROSA discovery")
+    parser.add_argument(
+        "--aws-only", action="store_true", help="Fetch AWS pricing only"
+    )
+    parser.add_argument(
+        "--claude-only", action="store_true", help="Fetch Claude pricing only"
+    )
     parser.add_argument(
         "--regions",
         nargs="+",
@@ -614,9 +508,8 @@ def main() -> None:
     args = parser.parse_args()
 
     # Determine what to fetch
-    fetch_aws = not args.claude_only and not args.rosa_only
-    fetch_claude = not args.aws_only and not args.rosa_only
-    fetch_rosa = not args.aws_only and not args.claude_only and not args.skip_rosa
+    fetch_aws = not args.claude_only
+    fetch_claude = not args.aws_only
 
     conn = init_db()
     now = datetime.now(timezone.utc).isoformat()
@@ -663,21 +556,14 @@ def main() -> None:
                     (now,),
                 )
 
-        # --- ROSA ---
-        if fetch_rosa:
-            print("\n=== ROSA Cluster Discovery ===")
-            rows = fetch_rosa_instances(now)
+        # --- ROSA service fees ---
+        if fetch_aws or (not args.claude_only):
+            print("\n=== ROSA Service Fees (aws.amazon.com/rosa/pricing) ===")
+            rows = fetch_rosa_service_fees(now)
             if rows:
-                count = upsert_rosa_instances(conn, rows)
+                count = upsert_pricing(conn, rows)
                 conn.commit()
-                print(f"  Total: {count} cluster nodes upserted")
-                conn.execute(
-                    "INSERT INTO _meta (key, value) VALUES ('last_rosa_fetch', ?) "
-                    "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-                    (now,),
-                )
-            else:
-                errors.append("ROSA: no nodes discovered (oc may not be available)")
+                print(f"  Total: {count} ROSA fee entries upserted")
 
         conn.commit()
 
