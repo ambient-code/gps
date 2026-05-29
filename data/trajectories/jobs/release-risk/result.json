@@ -11,7 +11,11 @@
     "n_pending_trials": 0,
     "n_cancelled_trials": 0,
     "n_retries": 0,
-    "evals": {}
+    "evals": {},
+    "n_input_tokens": 217000,
+    "n_cache_tokens": 17700,
+    "n_output_tokens": 2080,
+    "cost_usd": 0.63441
   },
   "trial_results": []
 }

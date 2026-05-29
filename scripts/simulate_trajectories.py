@@ -37,6 +37,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from harbor import JobConfig, JobResult, JobStats, TrialConfig, TrialResult
+from harbor.models.agent.context import AgentContext
 from harbor.models.task.id import LocalTaskId
 from harbor.models.trajectories import (
     Agent,
@@ -631,6 +632,18 @@ def _write_trial(trial_dir: Path, job_id: uuid.UUID, scenario: str, trajectory: 
     )
     (trial_dir / "config.json").write_text(trial_config.model_dump_json(exclude_none=True, indent=2))
 
+    # Surface the trajectory's aggregate metrics at the trial-summary level so
+    # the viewer's token/cost columns populate. Harbor's convention (see its
+    # installed agents, e.g. qwen_code/opencode): n_input_tokens is total prompt
+    # tokens *including* cache; the viewer derives uncached input itself.
+    fm = trajectory.final_metrics
+    agent_result = AgentContext(
+        n_input_tokens=fm.total_prompt_tokens,
+        n_cache_tokens=fm.total_cached_tokens,
+        n_output_tokens=fm.total_completion_tokens,
+        cost_usd=fm.total_cost_usd,
+    )
+
     trial_result = TrialResult(
         task_name=scenario,
         trial_name=trial_name,
@@ -639,6 +652,7 @@ def _write_trial(trial_dir: Path, job_id: uuid.UUID, scenario: str, trajectory: 
         task_checksum=trajectory.session_id,
         config=trial_config,
         agent_info=AgentInfo(name=AGENT_NAME, version=AGENT_VERSION),
+        agent_result=agent_result,
         started_at=BASE_TIME,
         finished_at=BASE_TIME,
     )
@@ -654,12 +668,20 @@ def write_job(output_dir: Path, scenario: str, trajectories: list[Trajectory]) -
     job_config = JobConfig(job_name=scenario, jobs_dir=str(output_dir))
     (job_dir / "config.json").write_text(job_config.model_dump_json(exclude_none=True, indent=2))
 
+    # Job-level token/cost aggregate across all trials, for the jobs-list columns.
+    stats = JobStats(
+        n_completed_trials=len(trajectories),
+        n_input_tokens=sum(t.final_metrics.total_prompt_tokens or 0 for t in trajectories),
+        n_cache_tokens=sum(t.final_metrics.total_cached_tokens or 0 for t in trajectories),
+        n_output_tokens=sum(t.final_metrics.total_completion_tokens or 0 for t in trajectories),
+        cost_usd=round(sum(t.final_metrics.total_cost_usd or 0.0 for t in trajectories), 6),
+    )
     job_result = JobResult(
         id=job_id,
         started_at=BASE_TIME,
         finished_at=BASE_TIME,
         n_total_trials=len(trajectories),
-        stats=JobStats(n_completed_trials=len(trajectories)),
+        stats=stats,
     )
     (job_dir / "result.json").write_text(job_result.model_dump_json(exclude_none=True, indent=2))
 

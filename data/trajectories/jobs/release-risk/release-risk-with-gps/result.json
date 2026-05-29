@@ -1,5 +1,5 @@
 {
-  "id": "e6e7ac3b-d9b6-4721-b453-d4d4300ad523",
+  "id": "17adef46-48ab-4e94-afda-1096dc8b19ac",
   "task_name": "release-risk",
   "trial_name": "release-risk-with-gps",
   "trial_uri": "file:///Users/jeder/repos/gps/.claude/worktrees/atif-simulator/data/trajectories/jobs/release-risk/release-risk-with-gps",
@@ -43,6 +43,12 @@
   "agent_info": {
     "name": "claude-code",
     "version": "1.0.0"
+  },
+  "agent_result": {
+    "n_input_tokens": 29700,
+    "n_cache_tokens": 17700,
+    "n_output_tokens": 640,
+    "cost_usd": 0.05091
   },
   "started_at": "2026-05-29T09:00:00Z",
   "finished_at": "2026-05-29T09:00:00Z"

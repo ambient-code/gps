@@ -146,6 +146,34 @@ def test_job_tree_recognized_by_scanner():
             assert scanner.get_trial_result("release-risk", t) is not None
 
 
+def test_summary_metrics_populated():
+    """Trial agent_result and job stats carry token/cost so viewer columns fill."""
+    data = sim.load_acme_data()
+    no_gps, with_gps = sim.build_release_risk("1.0", data)
+    with tempfile.TemporaryDirectory() as tmp:
+        sim.write_job(Path(tmp), "release-risk", [no_gps, with_gps])
+        scanner = JobScanner(Path(tmp))
+
+        # Per-trial: agent_result mirrors each trajectory's final_metrics.
+        for traj in (no_gps, with_gps):
+            tr = scanner.get_trial_result("release-risk", traj.trajectory_id)
+            ar = tr.agent_result
+            assert ar is not None, traj.trajectory_id
+            assert ar.n_input_tokens == traj.final_metrics.total_prompt_tokens
+            assert ar.n_cache_tokens == traj.final_metrics.total_cached_tokens
+            assert ar.n_output_tokens == traj.final_metrics.total_completion_tokens
+            assert ar.cost_usd == traj.final_metrics.total_cost_usd
+
+        # Job-level stats aggregate across trials.
+        jr = scanner.get_job_result("release-risk")
+        assert jr.stats.n_input_tokens == (
+            no_gps.final_metrics.total_prompt_tokens + with_gps.final_metrics.total_prompt_tokens
+        )
+        assert jr.stats.cost_usd == round(
+            no_gps.final_metrics.total_cost_usd + with_gps.final_metrics.total_cost_usd, 6
+        )
+
+
 # --- Standalone runner ------------------------------------------------------
 
 
