@@ -1,0 +1,428 @@
+{
+  "schema_version": "ATIF-v1.7",
+  "session_id": "660909AB-0152-5E91-B8B3-F0114B654F4A",
+  "trajectory_id": "release-risk-no-gps",
+  "agent": {
+    "name": "claude-code",
+    "version": "1.0.0",
+    "model_name": "claude-sonnet-4-6",
+    "tool_definitions": [
+      {
+        "type": "function",
+        "function": {
+          "name": "bash",
+          "description": "Run a shell command.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "command": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "read",
+          "description": "Read a file from disk.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "glob",
+          "description": "Find files matching a glob pattern.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "pattern": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "grep",
+          "description": "Search file contents with a regex.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "pattern": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    ]
+  },
+  "steps": [
+    {
+      "step_id": 1,
+      "timestamp": "2026-05-29T09:00:00+00:00",
+      "source": "system",
+      "message": "You are a senior engineering program manager assistant. Answer questions about release status, risk, ownership, and schedule using the tools available to you. Be concrete and cite specific features, people, and dates."
+    },
+    {
+      "step_id": 2,
+      "timestamp": "2026-05-29T09:00:00.010000+00:00",
+      "source": "user",
+      "message": "Assess the release risk for AcmeProduct 1.0. Which features are at risk, who owns them, and what are the key milestone dates?"
+    },
+    {
+      "step_id": 3,
+      "timestamp": "2026-05-29T09:00:00.020000+00:00",
+      "source": "agent",
+      "model_name": "claude-sonnet-4-6",
+      "message": "Let me locate the release data.",
+      "reasoning_content": "The user wants release risk for AcmeProduct 1.0. I don't have a tool for that — I'll have to dig through the repo. Let me find the data files.",
+      "tool_calls": [
+        {
+          "tool_call_id": "call_3",
+          "function_name": "bash",
+          "arguments": {
+            "command": "find . -name '*.csv' -maxdepth 3"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "call_3",
+            "content": "data/acme-feature-planning.csv\ndata/acme-release-schedule.csv\ndata/acme-issues-export.csv\ndata/acme-component-versions.csv"
+          }
+        ]
+      },
+      "metrics": {
+        "prompt_tokens": 4200,
+        "completion_tokens": 90,
+        "cached_tokens": 0,
+        "cost_usd": 0.01395
+      },
+      "llm_call_count": 1
+    },
+    {
+      "step_id": 4,
+      "timestamp": "2026-05-29T09:00:01.460000+00:00",
+      "source": "agent",
+      "model_name": "claude-sonnet-4-6",
+      "message": "Reading the release schedule.",
+      "reasoning_content": "There's a release schedule CSV. Let me read it to get the milestone dates.",
+      "tool_calls": [
+        {
+          "tool_call_id": "call_4",
+          "function_name": "bash",
+          "arguments": {
+            "command": "cat data/acme-release-schedule.csv"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "call_4",
+            "content": "Release,Task,Date Start,Date Finish\nAcmeProduct 1.0,Planning,2026-01-05,2026-01-30\nAcmeProduct 1.0,Development,2026-02-01,2026-04-15\nAcmeProduct 1.0,Code Freeze,2026-04-16,2026-04-22\nAcmeProduct 1.0,QE,2026-04-23,2026-05-10\nAcmeProduct 1.0,GA Release,2026-05-15,2026-05-15"
+          }
+        ]
+      },
+      "metrics": {
+        "prompt_tokens": 6800,
+        "completion_tokens": 80,
+        "cached_tokens": 0,
+        "cost_usd": 0.0216
+      },
+      "llm_call_count": 1
+    },
+    {
+      "step_id": 5,
+      "timestamp": "2026-05-29T09:00:03.420000+00:00",
+      "source": "agent",
+      "model_name": "claude-sonnet-4-6",
+      "message": "Searching for feature-to-release associations.",
+      "reasoning_content": "Good, I have 1.0 milestones. Now I need to know which features target 1.0 and their status. Let me search for files mentioning the release.",
+      "tool_calls": [
+        {
+          "tool_call_id": "call_5",
+          "function_name": "bash",
+          "arguments": {
+            "command": "grep -rl '1.0' data/"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "call_5",
+            "content": "data/acme-feature-planning.csv\ndata/acme-component-versions.csv\ndata/acme-release-schedule.csv"
+          }
+        ]
+      },
+      "metrics": {
+        "prompt_tokens": 9500,
+        "completion_tokens": 70,
+        "cached_tokens": 0,
+        "cost_usd": 0.02955
+      },
+      "llm_call_count": 1
+    },
+    {
+      "step_id": 6,
+      "timestamp": "2026-05-29T09:00:05.920000+00:00",
+      "source": "agent",
+      "model_name": "claude-sonnet-4-6",
+      "message": "Reading the feature planning data.",
+      "reasoning_content": "acme-feature-planning.csv looks most relevant. Let me dump it — though it's very wide, so the columns may be hard to line up.",
+      "tool_calls": [
+        {
+          "tool_call_id": "call_6",
+          "function_name": "bash",
+          "arguments": {
+            "command": "cat data/acme-feature-planning.csv"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "call_6",
+            "content": "<41-column CSV, wraps in terminal — hard to align values to headers>"
+          }
+        ]
+      },
+      "metrics": {
+        "prompt_tokens": 16500,
+        "completion_tokens": 120,
+        "cached_tokens": 0,
+        "cost_usd": 0.0513
+      },
+      "llm_call_count": 1
+    },
+    {
+      "step_id": 7,
+      "timestamp": "2026-05-29T09:00:09.820000+00:00",
+      "source": "agent",
+      "model_name": "claude-sonnet-4-6",
+      "message": "Inspecting the header row.",
+      "reasoning_content": "That wrapped badly and I can't reliably tell which column is status vs release vs team. Let me isolate the header row to map the columns.",
+      "tool_calls": [
+        {
+          "tool_call_id": "call_7",
+          "function_name": "bash",
+          "arguments": {
+            "command": "head -1 data/acme-feature-planning.csv"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "call_7",
+            "content": "Issue key,Title,Project,Hierarchy,Assignee,Sprint,Target start date,Target end date,Due date,Estimates (d),Parent,Priority,Issue status,Progress (%),...,Color Status,Release Date,RICE Score,...,Releases,Labels,Components,Team"
+          }
+        ]
+      },
+      "metrics": {
+        "prompt_tokens": 17800,
+        "completion_tokens": 110,
+        "cached_tokens": 0,
+        "cost_usd": 0.05505
+      },
+      "llm_call_count": 1
+    },
+    {
+      "step_id": 8,
+      "timestamp": "2026-05-29T09:00:13.980000+00:00",
+      "source": "agent",
+      "model_name": "claude-sonnet-4-6",
+      "message": "Filtering to 1.0 features.",
+      "reasoning_content": "So 'Releases' tags rows as acmeproduct-1.0 and 'Color Status' holds the risk flag. Let me filter to the 1.0 features.",
+      "tool_calls": [
+        {
+          "tool_call_id": "call_8",
+          "function_name": "bash",
+          "arguments": {
+            "command": "grep 'acmeproduct-1.0' data/acme-feature-planning.csv"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "call_8",
+            "content": "ACME-100,API Gateway v2,...,65,...,On Track,...,acmeproduct-1.0,...,acme-api,Platform Squad\nACME-101,Unified Authentication System,...,45,...,At Risk,...,acmeproduct-1.0,...,acme-auth,Platform Squad\nACME-102,Responsive UI Framework,...,80,...,On Track,...,acmeproduct-1.0,...,acme-ui,Platform Squad\nACME-108,Developer Portal,...,40,...,On Track,...,acmeproduct-1.0,...,acme-api,Platform Squad"
+          }
+        ]
+      },
+      "metrics": {
+        "prompt_tokens": 19200,
+        "completion_tokens": 160,
+        "cached_tokens": 0,
+        "cost_usd": 0.06
+      },
+      "llm_call_count": 1
+    },
+    {
+      "step_id": 9,
+      "timestamp": "2026-05-29T09:00:18.420000+00:00",
+      "source": "agent",
+      "model_name": "claude-sonnet-4-6",
+      "message": "Looking for ownership in the org data.",
+      "reasoning_content": "Eyeballing the rows, ACME-101 is flagged 'At Risk'. I need the owner and team. The 'Team' column says 'Platform Squad' but I want the human owner — let me check the org spreadsheet.",
+      "tool_calls": [
+        {
+          "tool_call_id": "call_9",
+          "function_name": "bash",
+          "arguments": {
+            "command": "find . -name '*.xlsx'"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "call_9",
+            "content": "data/acme-corp-org.xlsx"
+          }
+        ]
+      },
+      "metrics": {
+        "prompt_tokens": 20500,
+        "completion_tokens": 100,
+        "cached_tokens": 0,
+        "cost_usd": 0.063
+      },
+      "llm_call_count": 1
+    },
+    {
+      "step_id": 10,
+      "timestamp": "2026-05-29T09:00:23.120000+00:00",
+      "source": "agent",
+      "model_name": "claude-sonnet-4-6",
+      "message": "Attempting to read the org spreadsheet.",
+      "reasoning_content": "It's an xlsx. Let me try to read it.",
+      "tool_calls": [
+        {
+          "tool_call_id": "call_10",
+          "function_name": "bash",
+          "arguments": {
+            "command": "cat data/acme-corp-org.xlsx | head -c 400"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "call_10",
+            "content": "PK\u0003\u0004\u0014\u0000\b\b\b\u0000 <binary — unreadable as text>"
+          }
+        ]
+      },
+      "metrics": {
+        "prompt_tokens": 21000,
+        "completion_tokens": 90,
+        "cached_tokens": 0,
+        "cost_usd": 0.06435
+      },
+      "llm_call_count": 1
+    },
+    {
+      "step_id": 11,
+      "timestamp": "2026-05-29T09:00:27.920000+00:00",
+      "source": "agent",
+      "model_name": "claude-sonnet-4-6",
+      "message": "Falling back to the issues export.",
+      "reasoning_content": "xlsx is a zip archive; I can't parse it without a library here. Let me fall back to the issues export to at least get an assignee for the auth work.",
+      "tool_calls": [
+        {
+          "tool_call_id": "call_11",
+          "function_name": "bash",
+          "arguments": {
+            "command": "grep 'acme-auth' data/acme-issues-export.csv | head -5"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "call_11",
+            "content": "ACME-2,Fix authentication token refresh race condition,In Review,Critical,Carlos Mendoza,...\nACME-16,OAuth2 PKCE flow implementation,In Progress,Major,Carlos Mendoza,...\nACME-22,Fix session invalidation,In Review,Critical,Sophie Laurent,..."
+          }
+        ]
+      },
+      "metrics": {
+        "prompt_tokens": 22300,
+        "completion_tokens": 130,
+        "cached_tokens": 0,
+        "cost_usd": 0.06885
+      },
+      "llm_call_count": 1
+    },
+    {
+      "step_id": 12,
+      "timestamp": "2026-05-29T09:00:32.980000+00:00",
+      "source": "agent",
+      "model_name": "claude-sonnet-4-6",
+      "message": "Confirming the code freeze date.",
+      "reasoning_content": "Carlos Mendoza shows up on auth issues, so he's likely involved, but I can't confirm he owns the at-risk feature from this. Let me at least pin down the code-freeze date relative to today.",
+      "tool_calls": [
+        {
+          "tool_call_id": "call_12",
+          "function_name": "bash",
+          "arguments": {
+            "command": "grep 'Code Freeze' data/acme-release-schedule.csv"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "call_12",
+            "content": "AcmeProduct 1.0,Code Freeze,2026-04-16,2026-04-22"
+          }
+        ]
+      },
+      "metrics": {
+        "prompt_tokens": 24000,
+        "completion_tokens": 110,
+        "cached_tokens": 0,
+        "cost_usd": 0.07365
+      },
+      "llm_call_count": 1
+    },
+    {
+      "step_id": 13,
+      "timestamp": "2026-05-29T09:00:38.380000+00:00",
+      "source": "agent",
+      "model_name": "claude-sonnet-4-6",
+      "message": "**AcmeProduct 1.0 — partial risk assessment**\n\n- **At risk:** ACME-101 (Color Status = 'At Risk').\n- **Key dates:** Code Freeze 2026-04-16, GA 2026-05-15.\n- **Ownership:** likely Platform Squad; Carlos Mendoza appears on auth issues but I could not confirm the feature owner (the org spreadsheet is xlsx and unreadable here).\n- **Gaps:** RICE score and exact % complete were hard to extract from the 41-column planning CSV; treat with caution.",
+      "reasoning_content": "I have a partial picture. I can name the at-risk feature and the key dates, but I couldn't reliably resolve the human owner or pull the RICE score from that wide CSV. I'll report what I'm confident about and flag the gaps.",
+      "metrics": {
+        "prompt_tokens": 25500,
+        "completion_tokens": 380,
+        "cached_tokens": 0,
+        "cost_usd": 0.0822
+      },
+      "llm_call_count": 1
+    }
+  ],
+  "final_metrics": {
+    "total_prompt_tokens": 187300,
+    "total_completion_tokens": 1440,
+    "total_cached_tokens": 0,
+    "total_cost_usd": 0.5835,
+    "total_steps": 13
+  }
+}

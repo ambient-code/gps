@@ -1,0 +1,17 @@
+{
+  "id": "94be73b3-b892-5c06-89f8-40dd6616f220",
+  "started_at": "2026-05-29T09:00:00Z",
+  "updated_at": "2026-05-29T09:00:00Z",
+  "finished_at": "2026-05-29T09:00:00Z",
+  "n_total_trials": 2,
+  "stats": {
+    "n_completed_trials": 2,
+    "n_errored_trials": 0,
+    "n_running_trials": 0,
+    "n_pending_trials": 0,
+    "n_cancelled_trials": 0,
+    "n_retries": 0,
+    "evals": {}
+  },
+  "trial_results": []
+}

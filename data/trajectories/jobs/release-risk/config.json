@@ -1,0 +1,50 @@
+{
+  "job_name": "release-risk",
+  "jobs_dir": "/Users/jeder/repos/gps/.claude/worktrees/atif-simulator/data/trajectories/jobs",
+  "n_attempts": 1,
+  "timeout_multiplier": 1.0,
+  "debug": false,
+  "n_concurrent_trials": 4,
+  "quiet": false,
+  "retry": {
+    "max_retries": 0,
+    "exclude_exceptions": [
+      "RewardFileNotFoundError",
+      "AgentTimeoutError",
+      "VerifierOutputParseError",
+      "RewardFileEmptyError",
+      "VerifierTimeoutError"
+    ],
+    "wait_multiplier": 1.0,
+    "min_wait_sec": 1.0,
+    "max_wait_sec": 60.0
+  },
+  "environment": {
+    "type": "docker",
+    "force_build": false,
+    "delete": true,
+    "cpu_enforcement_policy": "auto",
+    "memory_enforcement_policy": "auto",
+    "extra_docker_compose": [],
+    "env": {},
+    "kwargs": {}
+  },
+  "verifier": {
+    "env": {},
+    "disable": false
+  },
+  "metrics": [],
+  "agents": [
+    {
+      "name": "oracle",
+      "skills": [],
+      "kwargs": {},
+      "env": {},
+      "mcp_servers": []
+    }
+  ],
+  "datasets": [],
+  "tasks": [],
+  "artifacts": [],
+  "extra_instruction_paths": []
+}

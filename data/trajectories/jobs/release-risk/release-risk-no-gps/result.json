@@ -1,0 +1,49 @@
+{
+  "id": "193c7971-690e-4176-b6e4-de3433ca0b7a",
+  "task_name": "release-risk",
+  "trial_name": "release-risk-no-gps",
+  "trial_uri": "file:///Users/jeder/repos/gps/.claude/worktrees/atif-simulator/data/trajectories/jobs/release-risk/release-risk-no-gps",
+  "task_id": {
+    "path": "release-risk"
+  },
+  "task_checksum": "660909AB-0152-5E91-B8B3-F0114B654F4A",
+  "config": {
+    "task": {
+      "name": "release-risk",
+      "overwrite": false
+    },
+    "trial_name": "release-risk-no-gps",
+    "trials_dir": "trials",
+    "timeout_multiplier": 1.0,
+    "agent": {
+      "name": "oracle",
+      "skills": [],
+      "kwargs": {},
+      "env": {},
+      "mcp_servers": []
+    },
+    "environment": {
+      "type": "docker",
+      "force_build": false,
+      "delete": true,
+      "cpu_enforcement_policy": "auto",
+      "memory_enforcement_policy": "auto",
+      "extra_docker_compose": [],
+      "env": {},
+      "kwargs": {}
+    },
+    "verifier": {
+      "env": {},
+      "disable": false
+    },
+    "artifacts": [],
+    "extra_instruction_paths": [],
+    "job_id": "94be73b3-b892-5c06-89f8-40dd6616f220"
+  },
+  "agent_info": {
+    "name": "claude-code",
+    "version": "1.0.0"
+  },
+  "started_at": "2026-05-29T09:00:00Z",
+  "finished_at": "2026-05-29T09:00:00Z"
+}

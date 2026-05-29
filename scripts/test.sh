@@ -180,6 +180,11 @@ conn.execute('SELECT 1 FROM $table LIMIT 1')
     done
 fi
 
+# Trajectory simulator
+echo ""
+echo "--- Trajectory Simulator ---"
+run "simulate_trajectories tests" uv run "$REPO_ROOT/tests/test_simulate_trajectories.py"
+
 # Summary
 echo ""
 echo "=== Results: $PASS passed, $FAIL failed ==="

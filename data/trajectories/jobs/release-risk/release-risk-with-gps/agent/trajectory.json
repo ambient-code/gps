@@ -1,0 +1,240 @@
+{
+  "schema_version": "ATIF-v1.7",
+  "session_id": "660909AB-0152-5E91-B8B3-F0114B654F4A",
+  "trajectory_id": "release-risk-with-gps",
+  "agent": {
+    "name": "claude-code",
+    "version": "1.0.0",
+    "model_name": "claude-sonnet-4-6",
+    "tool_definitions": [
+      {
+        "type": "function",
+        "function": {
+          "name": "release_risk_summary",
+          "description": "Assess release risk by comparing milestone dates against feature completion.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "release": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "get_release_schedule",
+          "description": "Get release schedule milestone dates for a product/version.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "product": {
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "get_feature_status",
+          "description": "Get feature details: progress, RICE score, releases, owner, team.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "issue_key": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "lookup_person",
+          "description": "Find a person by name, returning org, team, and role.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    ]
+  },
+  "steps": [
+    {
+      "step_id": 1,
+      "timestamp": "2026-05-29T09:00:00+00:00",
+      "source": "system",
+      "message": "You are a senior engineering program manager assistant. Answer questions about release status, risk, ownership, and schedule using the tools available to you. Be concrete and cite specific features, people, and dates."
+    },
+    {
+      "step_id": 2,
+      "timestamp": "2026-05-29T09:00:00.010000+00:00",
+      "source": "user",
+      "message": "Assess the release risk for AcmeProduct 1.0. Which features are at risk, who owns them, and what are the key milestone dates?"
+    },
+    {
+      "step_id": 3,
+      "timestamp": "2026-05-29T09:00:00.020000+00:00",
+      "source": "agent",
+      "model_name": "claude-sonnet-4-6",
+      "message": "Pulling the release risk summary from GPS.",
+      "reasoning_content": "GPS exposes release_risk_summary — that answers the core question directly. Let me call it for 1.0.",
+      "tool_calls": [
+        {
+          "tool_call_id": "call_3",
+          "function_name": "release_risk_summary",
+          "arguments": {
+            "release": "1.0"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "call_3",
+            "content": "Release acmeproduct-1.0: 4 features, 1 at risk.\nACME-101 Unified Authentication System: 45% complete, status=At Risk, owner=Carlos Mendoza, team=Platform Squad, RICE=88\nNearest milestone: Code Freeze 2026-04-16 (passed), GA 2026-05-15."
+          }
+        ]
+      },
+      "metrics": {
+        "prompt_tokens": 4200,
+        "completion_tokens": 70,
+        "cached_tokens": 0,
+        "cost_usd": 0.01365
+      },
+      "llm_call_count": 1
+    },
+    {
+      "step_id": 4,
+      "timestamp": "2026-05-29T09:00:01.460000+00:00",
+      "source": "agent",
+      "model_name": "claude-sonnet-4-6",
+      "message": "Fetching the milestone schedule.",
+      "reasoning_content": "One feature is at risk. Let me confirm the exact milestone dates.",
+      "tool_calls": [
+        {
+          "tool_call_id": "call_4",
+          "function_name": "get_release_schedule",
+          "arguments": {
+            "product": "acmeproduct",
+            "version": "1.0"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "call_4",
+            "content": "AcmeProduct 1.0: Planning, Development, Code Freeze 2026-04-16, QE, GA Release 2026-05-15."
+          }
+        ]
+      },
+      "metrics": {
+        "prompt_tokens": 5200,
+        "completion_tokens": 60,
+        "cached_tokens": 3500,
+        "cost_usd": 0.00705
+      },
+      "llm_call_count": 1
+    },
+    {
+      "step_id": 5,
+      "timestamp": "2026-05-29T09:00:03.100000+00:00",
+      "source": "agent",
+      "model_name": "claude-sonnet-4-6",
+      "message": "Getting at-risk feature detail.",
+      "reasoning_content": "Let me pull full detail on the at-risk feature ACME-101 (owner, team, RICE, progress).",
+      "tool_calls": [
+        {
+          "tool_call_id": "call_5",
+          "function_name": "get_feature_status",
+          "arguments": {
+            "issue_key": "ACME-101"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "call_5",
+            "content": "ACME-101 — Unified Authentication System\nStatus: In Progress (At Risk), 45% complete\nOwner: Carlos Mendoza | Team: Platform Squad | RICE: 88\nTarget end: 2026-05-15 | Release: acmeproduct-1.0"
+          }
+        ]
+      },
+      "metrics": {
+        "prompt_tokens": 6100,
+        "completion_tokens": 80,
+        "cached_tokens": 4200,
+        "cost_usd": 0.00816
+      },
+      "llm_call_count": 1
+    },
+    {
+      "step_id": 6,
+      "timestamp": "2026-05-29T09:00:04.920000+00:00",
+      "source": "agent",
+      "model_name": "claude-sonnet-4-6",
+      "message": "Looking up the owner.",
+      "reasoning_content": "Owner is Carlos Mendoza. Let me get their org context to round out the answer.",
+      "tool_calls": [
+        {
+          "tool_call_id": "call_6",
+          "function_name": "lookup_person",
+          "arguments": {
+            "name": "Carlos Mendoza"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "call_6",
+            "content": "Carlos Mendoza: Engineering, Platform Squad. Owner/assignee on the Unified Authentication System epic and related acme-auth work."
+          }
+        ]
+      },
+      "metrics": {
+        "prompt_tokens": 6800,
+        "completion_tokens": 70,
+        "cached_tokens": 4800,
+        "cost_usd": 0.00849
+      },
+      "llm_call_count": 1
+    },
+    {
+      "step_id": 7,
+      "timestamp": "2026-05-29T09:00:06.880000+00:00",
+      "source": "agent",
+      "model_name": "claude-sonnet-4-6",
+      "message": "**AcmeProduct 1.0 — release risk assessment**\n\n- **At risk:** ACME-101 Unified Authentication System — 45% complete, flagged 'At Risk' (RICE 88).\n- **Owner:** Carlos Mendoza (Platform Squad).\n- **Key dates:** Code Freeze 2026-04-16 (already passed), GA 2026-05-15.\n- **Read:** with code freeze passed and the feature at 45%, ACME-101 is the primary threat to the 1.0 GA. The other 3 features targeting 1.0 are On Track.",
+      "reasoning_content": "I have every dimension: at-risk feature, owner, team, completion, RICE, and the milestone dates. I can give a complete, sourced answer.",
+      "metrics": {
+        "prompt_tokens": 7400,
+        "completion_tokens": 360,
+        "cached_tokens": 5200,
+        "cost_usd": 0.01356
+      },
+      "llm_call_count": 1
+    }
+  ],
+  "final_metrics": {
+    "total_prompt_tokens": 29700,
+    "total_completion_tokens": 640,
+    "total_cached_tokens": 17700,
+    "total_cost_usd": 0.05091,
+    "total_steps": 7
+  }
+}
