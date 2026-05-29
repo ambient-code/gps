@@ -25,6 +25,8 @@ uv run mcp_server.py --http                  # start MCP server (HTTP :8000)
 - Database (data/gps.db) is always opened read-only
 - Use uv (not pip). Use ruff (enforced by pre-commit).
 - `scripts/test.sh` is bash — run directly, not via `uv run`
+- Use `bd` (beads) for all task tracking — not TodoWrite or TaskCreate
+- Pre-commit runs: ruff, ruff-format, no-secrets check, protected-files check
 
 ## More Info
 See [BOOKMARKS.md](BOOKMARKS.md) for deployment docs, schema reference, and ADRs.
