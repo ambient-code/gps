@@ -184,6 +184,7 @@ fi
 echo ""
 echo "--- Trajectory Simulator ---"
 run "simulate_trajectories tests" uv run "$REPO_ROOT/tests/test_simulate_trajectories.py"
+run "compare_trajectories runs" uv run "$REPO_ROOT/scripts/compare_trajectories.py" --scenario release-risk
 
 # Summary
 echo ""
